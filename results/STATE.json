@@ -1,0 +1,41 @@
+{
+  "current_phase": "PHASE_8_COMPLETE",
+  "phase_0_status": "PASS",
+  "phase_1_status": "PASS",
+  "phase_2_status": "PASS",
+  "phase_3_status": "PASS",
+  "phase_4_status": "PASS",
+  "phase_5_status": "PASS",
+  "phase_6_status": "PASS",
+  "phase_7_status": "PASS",
+  "phase_8_status": "PASS",
+  "updated_at": "2026-11-05T09:54:40Z",
+  "artifacts": {
+    "env_json": "results/env.json",
+    "heldout_cases_json": "results/heldout_cases.json",
+    "trt_build_json": "results/trt_build.json",
+    "bench_pytorch_fp32_strict_json": "results/bench_pytorch_fp32_strict.json",
+    "bench_pytorch_fp32_json": "results/bench_pytorch_fp32.json",
+    "bench_pytorch_amp_json": "results/bench_pytorch_amp.json",
+    "bench_trt_fp16_json": "results/bench_trt_fp16.json",
+    "bench_trt_fp16_optimized_json": "results/bench_trt_fp16_optimized.json",
+    "eval_pytorch_fp32_strict_csv": "results/eval_pytorch_fp32_strict.csv",
+    "eval_pytorch_fp32_csv": "results/eval_pytorch_fp32.csv",
+    "eval_pytorch_amp_csv": "results/eval_pytorch_amp.csv",
+    "eval_trt_fp16_csv": "results/eval_trt_fp16.csv",
+    "eval_trt_fp16_optimized_csv": "results/eval_trt_fp16_optimized.csv",
+    "sweep_csv": "results/sweep.csv",
+    "validation_csv": "results/validation.csv",
+    "bland_altman_json": "results/bland_altman.json",
+    "failure_analysis_json": "results/failure_analysis.json",
+    "nsys_summary_json": "results/nsys_summary.json",
+    "figures": [
+      "docs/figures/stage_breakdown.png",
+      "docs/figures/nsys_trace.png",
+      "docs/figures/pareto_sweep.png",
+      "docs/figures/bland_altman.png",
+      "docs/figures/failure_case_1.png",
+      "docs/figures/failure_case_2.png"
+    ]
+  }
+}

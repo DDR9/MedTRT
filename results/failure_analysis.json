@@ -1,0 +1,46 @@
+{
+  "worst_cases": [
+    {
+      "rank": 1,
+      "case_id": "spleen_56",
+      "dice_trt_fp16": 0.936064,
+      "dice_fp32": 0.936098,
+      "v_gt_cm3": 78.0703,
+      "v_trt_fp16_cm3": 76.1435,
+      "v_error_cm3": -1.9268,
+      "voxel_spacing_mm": [
+        0.699,
+        0.699,
+        7.0
+      ],
+      "slice_indices_xyz": [
+        99,
+        200,
+        27
+      ],
+      "figure_path": "docs/figures/failure_case_1.png",
+      "engineering_attribution": "Coarse z-axis slice thickness (7.0 mm vs. 1.5-5.0 mm standard) induces severe partial-volume averaging at the inferior and superior splenic poles, while soft-tissue isodensity along the left hepatic lobe / gastric fundus boundary causes minor under-segmentation (-2.5 cm\u00b3)."
+    },
+    {
+      "rank": 2,
+      "case_id": "spleen_62",
+      "dice_trt_fp16": 0.960988,
+      "dice_fp32": 0.961134,
+      "v_gt_cm3": 275.9329,
+      "v_trt_fp16_cm3": 277.2458,
+      "v_error_cm3": 1.3129,
+      "voxel_spacing_mm": [
+        0.676,
+        0.676,
+        5.0
+      ],
+      "slice_indices_xyz": [
+        87,
+        194,
+        67
+      ],
+      "figure_path": "docs/figures/failure_case_2.png",
+      "engineering_attribution": "Prominent hyperdense splenic hilum vasculature and intimate anatomical contact with the adjacent stomach wall and splenic flexure create local boundary ambiguity at the medial hilum, yielding minor contour divergence while preserving total volume within < 0.7 cm\u00b3."
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+# Datasets, Bundles, Compiled Engines & Raw Nsight Traces
+data/
+bundles/
+engines/
+*.nii
+*.nii.gz
+*.onnx
+*.engine
+*.pt
+*.pth
+*.nsys-rep
+*.qdrep
+results/traces/
+
+# Python Bytecode & Environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/

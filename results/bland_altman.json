@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-11-05T09:49:35.301996+00:00",
+  "equivalence": {
+    "mean_abs_delta_dice_trt_vs_fp32": 0.000548,
+    "max_abs_delta_dice_trt_vs_fp32": 0.001369,
+    "tolerance_threshold": 0.005,
+    "passed": true
+  },
+  "bland_altman_trt_fp16_vs_gt": {
+    "bias_cm3": -3.4976,
+    "sd_cm3": 5.0334,
+    "loa_lower_cm3": -13.3631,
+    "loa_upper_cm3": 6.3678,
+    "mae_cm3": 4.2372,
+    "max_abs_diff_cm3": 12.5611
+  },
+  "bland_altman_pytorch_fp32_vs_gt": {
+    "bias_cm3": -5.1683,
+    "sd_cm3": 5.177,
+    "loa_lower_cm3": -15.3153,
+    "loa_upper_cm3": 4.9787,
+    "mae_cm3": 5.1683,
+    "max_abs_diff_cm3": 14.4751
+  },
+  "bland_altman_trt_fp16_vs_pytorch_fp32": {
+    "bias_cm3": 1.6707,
+    "sd_cm3": 0.5515,
+    "loa_lower_cm3": 0.5897,
+    "loa_upper_cm3": 2.7517,
+    "mae_cm3": 1.6707,
+    "max_abs_diff_cm3": 2.4828
+  }
+}

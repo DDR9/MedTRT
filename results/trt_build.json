@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-11-05T09:25:45.146851+00:00",
+  "tensorrt_version": "10.16.1.11",
+  "engine_path": "engines\\spleen_unet_fp16.engine",
+  "engine_size_mb": 13.749,
+  "build_duration_s": 28.648,
+  "precision": "FP16",
+  "min_shape": [
+    1,
+    1,
+    96,
+    96,
+    96
+  ],
+  "opt_shape": [
+    2,
+    1,
+    96,
+    96,
+    96
+  ],
+  "max_shape": [
+    8,
+    1,
+    96,
+    96,
+    96
+  ],
+  "onnx": {
+    "onnx_path": "engines\\spleen_unet_dynamic.onnx",
+    "onnx_size_mb": 18.36,
+    "opset_version": 17,
+    "export_time_s": 0.714,
+    "max_abs_diff_vs_pytorch_fp32": 2.86102294921875e-05,
+    "mean_abs_diff_vs_pytorch_fp32": 2.928401045210194e-06
+  }
+}
