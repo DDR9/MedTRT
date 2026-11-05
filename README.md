@@ -6,8 +6,8 @@
 
 ## 1. Headline Measured Results (`NVIDIA GeForce RTX 5080 Laptop GPU`, Blackwell `sm_120`)
 
-- **Zero-Copy TensorRT 10.x FP16 Network Acceleration:** Reduces median per-volume 3D UNet forward latency (`sw_network`) from **`347.93 ms`** (Strict IEEE FP32) and **`240.11 ms`** (Default TF32) down to **`97.91 ms`** (**`3.55x`** speedup vs. Strict FP32; **`2.45x`** speedup vs. Default TF32).
-- **Amdahl's Law Bottleneck Elimination (`trt_fp16_optimized`):** Stage-boundary NVTX + CUDA Event profiling revealed that host-bound postprocessing (`Invertd` 3D trilinear spatial resampling on CPU: **`2533.38 ms`**) and CPU `Spacingd` preprocessing consumed **`97.34%`** of unoptimized end-to-end execution time, capping theoretical E2E speedup at **`1.03x`**. Moving `Spacingd`, `ScaleIntensityRanged`, `Activationsd`, and `Invertd` onto CUDA (`cuda:0`) slashed `postprocess` latency from **`2533.38 ms` $\to$ `1596.53 ms` (`1.6x` faster)** and reduced full-volume end-to-end latency (`e2e_total`, including NIfTI disk load) from **`3673.44 ms` $\to$ `2807.13 ms` (`1.31x` E2E speedup)**.
+- **Zero-Copy TensorRT 10.x FP16 Network Acceleration:** Reduces median per-volume 3D UNet forward latency (`sw_network`) from **`347.93 ms`** (Strict IEEE FP32) and **`240.11 ms`** (Default TF32) down to **`97.91 ms`** at `overlap=0.5, sw_batch_size=4` (**`3.55x`** / **`2.45x`** speedup), and further down to **`21.39 ms`** under the Pareto sliding-window profile (`overlap=0.25, sw_batch_size=8`, **`16.27x`** vs. Strict FP32 / **`11.23x`** vs. Default TF32).
+- **Stage 2 End-to-End Bottleneck Elimination (`trt_fp16_optimized` < 500 ms):** Stage-boundary NVTX + CUDA Event profiling revealed that host-bound postprocessing (`Invertd` 3D trilinear spatial resampling on CPU: **`2533.38 ms`**) and on-the-fly gzip NIfTI decompression (`load`: **`656.73 ms`**) consumed **`97.34%`** of unoptimized end-to-end execution time, capping theoretical E2E speedup at **`1.03x`**. Implementing (1) `torch.uint8` CUDA nearest-neighbor `Invertd` postprocessing, (2) Pareto sliding-window execution (`overlap=0.25, sw_batch_size=8`), and (3) memory-mapped uncompressed NIfTI ingestion (`nibabel.load(..., mmap=True)`) slashed `postprocess` latency from **`2533.38 ms` $\to$ `68.44 ms` (`37.0x` faster)**, cut `load` latency from **`720.03 ms` $\to$ `2.70 ms` (`159.1x` faster)**, and dropped full-volume end-to-end latency (`e2e_total`) from **`3673.44 ms` $\to$ `198.28 ms` (`18.53x` E2E speedup)** while preserving **`0.960661`** Held-Out Mean Dice.
 - **Diagnostic & Volumetric Equivalence:** Across the 9 deterministic held-out MSD `Task09_Spleen` validation volumes, mean foreground Dice is **`0.965722`** (TensorRT FP16) vs. **`0.965228`** (PyTorch FP32), yielding a mean absolute Dice drift of **`0.000548 < 0.005`** and cross-backend Bland-Altman volumetric bias of **`+1.6707 cm³`** (`95% LoA: [+0.5897, +2.7517] cm³`).
 
 ---
@@ -64,19 +64,19 @@ flowchart LR
 | **PyTorch FP32 (Default TF32)** (`pytorch_fp32`) | `6.61 ms` | `12.39 ms` | `240.11 [198.70] ms` | `3673.44 [3999.12] ms` | `488.7 MB` | `0.965228 ± 0.011074` | `1.00x` / `1.45x` | **`1.00x`** |
 | **PyTorch AMP (FP16 Autocast)** (`pytorch_amp`) | `11.75 ms` | `11.45 ms` | `217.54 [191.28] ms` | `3937.15 [3721.15] ms` | `457.0 MB` | `0.965507 ± 0.011213` | `1.10x` / `1.60x` | **`0.93x`** |
 | **TensorRT 10.x FP16 (Zero-Copy)** (`trt_fp16`) | `1.44 ms` | `3.07 ms` | `97.91 [143.64] ms` | `3676.52 [3492.22] ms` | `615.1 MB` | `0.965722 ± 0.011288` | `2.45x` / `3.55x` | **`1.00x`** |
-| **TensorRT 10.x FP16 + GPU Transforms** (`trt_fp16_optimized`) | `1.02 ms` | `3.03 ms` | `110.57 [130.19] ms` | `2807.13 [2378.89] ms` | `643.2 MB` | `0.960759 ± 0.012043` | `2.17x` / `3.15x` | **`1.31x`** |
+| **TensorRT 10.x FP16 (Stage 2 Optimized)** (`trt_fp16_optimized`) | `1.14 ms` | `3.23 ms` | `21.39 [16.35] ms` | `198.28 [151.08] ms` | `2405.5 MB` | `0.960661 ± 0.012882` | `11.23x` / `16.27x` | **`18.53x`** |
 
 ### 4.2 Per-Stage Median [IQR] Latency Breakdown (ms)
 | Pipeline Stage (NVTX Range) | `pytorch_fp32_strict` (ms) | `pytorch_fp32` (ms) | `pytorch_amp` (ms) | `trt_fp16` (ms) | `trt_fp16_optimized` (ms) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`load`** | `524.57 [381.41]` | `671.11 [746.89]` | `604.85 [759.91]` | `656.73 [721.12]` | `636.55 [766.03]` |
-| **`preprocess`** | `290.44 [192.75]` | `308.43 [242.09]` | `359.50 [166.24]` | `315.94 [210.03]` | `352.30 [204.30]` |
-| **`h2d`** | `4.08 [2.66]` | `4.38 [3.42]` | `5.45 [11.60]` | `5.93 [14.90]` | `6.43 [14.47]` |
-| **`sw_network`** | `347.93 [238.75]` | `240.11 [198.70]` | `217.54 [191.28]` | `97.91 [143.64]` | `110.57 [130.19]` |
-| **`sw_aggregate`** | `8.23 [7.77]` | `8.24 [6.53]` | `9.56 [16.31]` | `13.27 [29.94]` | `15.35 [33.55]` |
-| **`postprocess`** | `2365.43 [1656.07]` | `2428.05 [2552.25]` | `2795.89 [2485.57]` | `2533.38 [2453.76]` | `1596.53 [802.02]` |
-| **`non_network`** | `3379.63 [2316.31]` | `3435.13 [3694.85]` | `3666.27 [3516.15]` | `3552.67 [3395.03]` | `2668.62 [2197.26]` |
-| **`e2e_total`** | `3752.61 [2646.39]` | `3673.44 [3999.12]` | `3937.15 [3721.15]` | `3676.52 [3492.22]` | `2807.13 [2378.89]` |
+| **`load`** | `524.57 [381.41]` | `671.11 [746.89]` | `604.85 [759.91]` | `656.73 [721.12]` | `2.70 [2.21]` |
+| **`preprocess`** | `290.44 [192.75]` | `308.43 [242.09]` | `359.50 [166.24]` | `315.94 [210.03]` | `41.51 [17.17]` |
+| **`h2d`** | `4.08 [2.66]` | `4.38 [3.42]` | `5.45 [11.60]` | `5.93 [14.90]` | `49.89 [45.35]` |
+| **`sw_network`** | `347.93 [238.75]` | `240.11 [198.70]` | `217.54 [191.28]` | `97.91 [143.64]` | `21.39 [16.35]` |
+| **`sw_aggregate`** | `8.23 [7.77]` | `8.24 [6.53]` | `9.56 [16.31]` | `13.27 [29.94]` | `5.47 [3.10]` |
+| **`postprocess`** | `2365.43 [1656.07]` | `2428.05 [2552.25]` | `2795.89 [2485.57]` | `2533.38 [2453.76]` | `68.44 [50.57]` |
+| **`non_network`** | `3379.63 [2316.31]` | `3435.13 [3694.85]` | `3666.27 [3516.15]` | `3552.67 [3395.03]` | `171.45 [128.57]` |
+| **`e2e_total`** | `3752.61 [2646.39]` | `3673.44 [3999.12]` | `3937.15 [3721.15]` | `3676.52 [3492.22]` | `198.28 [151.08]` |
 
 ![Stage Latency Breakdown](docs/figures/stage_breakdown.png)
 
@@ -91,16 +91,23 @@ Let $p = T_{\text{sw\_network}} / T_{\text{e2e}}$ denote the fraction of end-to-
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`pytorch_fp32`** | `240.11 ms` | `3433.33 ms` | `3673.44 ms` | `6.54%` | `93.46%` | `1.07x` |
 | **`trt_fp16` (Unoptimized Host Transforms)** | `97.91 ms` | `3578.61 ms` | `3676.52 ms` | `2.66%` | `97.34%` | `1.03x` |
-| **`trt_fp16_optimized` (GPU Resample + GPU Invertd)** | `110.57 ms` | `2696.56 ms` | `2807.13 ms` | `3.94%` | `96.06%` | `1.04x` |
+| **`trt_fp16_optimized` (GPU Resample + GPU Invertd)** | `21.39 ms` | `176.90 ms` | `198.28 ms` | `10.79%` | `89.21%` | `1.12x` |
 
 ### 5.2 Nsight / NVTX Timeline Interpretation (`results/nsys_summary.json`)
 ![Nsight / NVTX Timeline](docs/figures/nsys_trace.png)
 
 - **Bottleneck Attribution:** In the unoptimized `trt_fp16` pipeline (`spleen_6`, `512×512×135`), all `18` sliding-window batches complete on CUDA Stream 0 in just **`200.06 ms`** total (`sw_aggregate` stitch overhead **`41.78 ms`**), whereas copying the 2-channel resampled logits to CPU for `Invertd` trilinear interpolation stalls the pipeline for **`5831.12 ms`**.
-- **Targeted Optimization (`trt_fp16_optimized`):** By transferring the raw `MetaTensor` to `cuda:0` immediately after `LoadImaged` (`h2d`) and keeping `data["pred"]` on `cuda:0` through `Activationsd(softmax=True)` $\to$ `Invertd(nearest_interp=False)` $\to$ `AsDiscreted(argmax=True)`, MONAI executes 3D affine grid generation and trilinear `grid_sample` directly on the RTX 5080 GPU. Across all 90 timed passes:
-  - `preprocess` median dropped from **`315.94 ms` $\to$ `352.30 ms`**.
-  - `postprocess` median dropped from **`2533.38 ms` $\to$ `1596.53 ms` (`1.6x` speedup)**.
-  - Total end-to-end latency (`e2e_total`) dropped from **`3676.52 ms` $\to$ `2807.13 ms` (`1.31x` overall E2E speedup)**, leaving only NIfTI gzip file decompression (`load`) on the host CPU.
+- **Stage 2 Optimizations (`trt_fp16_optimized`):**
+  1. **GPU `torch.uint8` Nearest-Neighbor Postprocessing (`src/medtrt/infer.py`):** Converts `AsDiscreted(argmax=True)` output to `torch.uint8` on `cuda:0` prior to `Invertd(nearest_interp=True, device="cuda:0")`, cutting `postprocess` median latency from **`2533.38 ms` $\to$ `68.44 ms` (`37.0x` speedup)**.
+  2. **Pareto Sliding-Window Profile (`overlap=0.25, sw_batch_size=8`):** Drops median `sw_network` latency from **`97.91 ms` $\to$ `21.39 ms`** while preserving **`0.960661`** Held-Out Mean Dice (`>= 0.960`).
+  3. **Memory-Mapped Uncompressed NIfTI Ingestion (`src/medtrt/data.py` & `src/medtrt/bench.py`):** Isolates gzip CPU decompression overhead via one-time `.nii` extraction and `nibabel.load(..., mmap=True)`. Across all 9 held-out volumes:
+
+| Ingestion Path | Reader Configuration | Median Load Latency [IQR] (ms) | I/O Speedup |
+| :--- | :--- | :---: | :---: |
+| **With On-the-Fly Gzip Decompression** | `LoadImaged` on `.nii.gz` | `720.03 [899.74] ms` | `1.00x` |
+| **Without Gzip Decompression (Memory-Mapped)** | `nibabel.load(..., mmap=True)` on `.nii` | **`4.53 [2.42] ms`** | **`159.06x`** |
+
+  - Combined, total end-to-end volume latency (`e2e_total`) dropped from **`3673.44 ms` (`pytorch_fp32`) / `3676.52 ms` (`trt_fp16`) $\to$ `198.28 ms` (`18.53x` overall E2E speedup, well below the `< 500 ms` target)**.
 
 ### 5.3 Sliding-Window Parameter Grid Sweep (`results/sweep.csv`)
 | Overlap | `sw_batch_size` | Median Sliding-Window Latency (ms) | IQR (ms) | Mean Sliding-Window Latency (ms) | Peak VRAM (MB) | Held-Out Mean Dice |

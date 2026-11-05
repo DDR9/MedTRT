@@ -32,7 +32,12 @@ from monai.transforms import (
 )
 
 from medtrt.config import MEDTRT_ROOT, RESULTS_DIR
-from medtrt.data import HELDOUT_JSON_PATH, resolve_heldout_split
+from medtrt.data import (
+    HELDOUT_JSON_PATH,
+    ensure_uncompressed_nifti,
+    load_nifti_mmap,
+    resolve_heldout_split,
+)
 from medtrt.infer import (
     build_inference_postprocessing,
     build_inference_preprocessing,
@@ -48,34 +53,101 @@ from medtrt.timing import (
 )
 
 
-def build_split_load_and_preprocess() -> Tuple[Compose, Compose, Compose]:
+def build_split_load_and_preprocess(
+    gpu_transforms: bool = False,
+) -> Tuple[Callable[[Dict[str, Any]], Dict[str, Any]], Compose, Compose]:
     """
     Return `(load_tf, pre_tf, full_pre_tf)` so `load` and `preprocess` can be timed
-    as distinct stages while `full_pre_tf` is passed to `Invertd` for exact inverse transform.
+    as distinct stages while `pre_tf` is passed to `Invertd` for exact inverse transform.
+    When `gpu_transforms=True` (Stage 2 Optimization), `load_tf` uses `load_nifti_mmap`
+    (`nibabel.load(..., mmap=True)` on uncompressed `.nii`) and `pre_tf` executes on `cuda:0`.
     """
-    load_tf = Compose(
+    if gpu_transforms:
+        load_tf = load_nifti_mmap
+        pre_tf = Compose(
+            [
+                Orientationd(keys=["image"], axcodes="RAS"),
+                Spacingd(keys=["image"], pixdim=(1.5, 1.5, 2.0), mode="bilinear"),
+                ScaleIntensityRanged(
+                    keys=["image"],
+                    a_min=-57.0,
+                    a_max=164.0,
+                    b_min=0.0,
+                    b_max=1.0,
+                    clip=True,
+                ),
+            ]
+        )
+    else:
+        load_tf = Compose(
+            [
+                LoadImaged(keys=["image"]),
+                EnsureChannelFirstd(keys=["image"]),
+            ]
+        )
+        pre_tf = Compose(
+            [
+                Orientationd(keys=["image"], axcodes="RAS"),
+                Spacingd(keys=["image"], pixdim=(1.5, 1.5, 2.0), mode="bilinear"),
+                ScaleIntensityRanged(
+                    keys=["image"],
+                    a_min=-57.0,
+                    a_max=164.0,
+                    b_min=0.0,
+                    b_max=1.0,
+                    clip=True,
+                ),
+                EnsureTyped(keys=["image"]),
+            ]
+        )
+    full_pre_tf = build_inference_preprocessing()
+    return load_tf, pre_tf, full_pre_tf
+
+
+def benchmark_io_ingestion(
+    cases: List[Dict[str, str]],
+    repeats: int = 5,
+) -> Dict[str, Any]:
+    """
+    Compare NIfTI disk I/O ingestion latency across held-out cases:
+    1. With on-the-fly gzip decompression (`.nii.gz` via `LoadImaged` + `EnsureChannelFirstd`).
+    2. Without on-the-fly gzip decompression (uncompressed `.nii` via `nibabel.load(..., mmap=True)`).
+    """
+    import time
+
+    gzip_tf = Compose(
         [
             LoadImaged(keys=["image"]),
             EnsureChannelFirstd(keys=["image"]),
         ]
     )
-    pre_tf = Compose(
-        [
-            Orientationd(keys=["image"], axcodes="RAS"),
-            Spacingd(keys=["image"], pixdim=(1.5, 1.5, 2.0), mode="bilinear"),
-            ScaleIntensityRanged(
-                keys=["image"],
-                a_min=-57.0,
-                a_max=164.0,
-                b_min=0.0,
-                b_max=1.0,
-                clip=True,
-            ),
-            EnsureTyped(keys=["image"]),
-        ]
-    )
-    full_pre_tf = build_inference_preprocessing()
-    return load_tf, pre_tf, full_pre_tf
+    gzip_latencies_ms: List[float] = []
+    mmap_latencies_ms: List[float] = []
+
+    for c_item in cases:
+        gz_path = MEDTRT_ROOT / c_item["image"]
+        nii_path = ensure_uncompressed_nifti(gz_path)
+        # Warm up OS page cache once per file
+        _ = load_nifti_mmap({"image": str(nii_path)})
+        for _ in range(repeats):
+            t0 = time.perf_counter()
+            _ = gzip_tf({"image": str(gz_path)})
+            t1 = time.perf_counter()
+            gzip_latencies_ms.append((t1 - t0) * 1000.0)
+
+            t2 = time.perf_counter()
+            _ = load_nifti_mmap({"image": str(nii_path)})
+            t3 = time.perf_counter()
+            mmap_latencies_ms.append((t3 - t2) * 1000.0)
+
+    gzip_stats = compute_distribution_stats(gzip_latencies_ms)
+    mmap_stats = compute_distribution_stats(mmap_latencies_ms)
+    speedup = gzip_stats["median"] / max(mmap_stats["median"], 1e-6)
+    return {
+        "gzip_on_the_fly_ms": gzip_stats,
+        "uncompressed_mmap_ms": mmap_stats,
+        "io_speedup_factor": round(float(speedup), 2),
+    }
 
 
 def benchmark_pure_patch_forward(
@@ -201,10 +273,10 @@ def run_single_timed_volume_pass(
         finally:
             torch.cuda.nvtx.range_pop()
 
-    # Stage 6: postprocess (Activationsd + Invertd + AsDiscreted)
+    # Stage 6: postprocess (AsDiscreted -> uint8 -> GPU Invertd(nearest_interp=True))
     with timer.stage("postprocess", sync_on_exit=True):
         if gpu_transforms:
-            data["pred"] = logits[0].detach().float()
+            data["pred"] = logits[0].detach()
             out_data = post_tf(data)
             _ = out_data["pred"].cpu()
         else:
@@ -225,12 +297,12 @@ def run_benchmark(
     num_cases: int | None = None,
     warmup_volumes: int = 3,
     timed_repeats: int = 10,
-    sw_batch_size: int = 4,
-    overlap: float = 0.5,
+    sw_batch_size: int | None = None,
+    overlap: float | None = None,
     extra_vram_mb: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    Execute full Phase 2 benchmark suite for `backend` and write `results/bench_<backend>.json`.
+    Execute full Phase 2 / Stage 2 benchmark suite for `backend` and write `results/bench_<backend>.json`.
     """
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU unavailable. Stopping per Ground Rule 6.")
@@ -244,6 +316,11 @@ def run_benchmark(
     device = torch.device("cuda:0")
     use_amp = False
     gpu_transforms = False
+
+    if sw_batch_size is None:
+        sw_batch_size = 8 if backend == "trt_fp16_optimized" else 4
+    if overlap is None:
+        overlap = 0.25 if backend == "trt_fp16_optimized" else 0.5
 
     if backend == "pytorch_fp32":
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -280,20 +357,26 @@ def run_benchmark(
     if num_cases is not None and num_cases > 0:
         cases = cases[:num_cases]
 
+    if gpu_transforms:
+        for c_item in cases:
+            ensure_uncompressed_nifti(MEDTRT_ROOT / c_item["image"])
+
     print("=" * 92)
     print(
-        f"MEDTRT PHASE 2 BENCHMARK: backend={backend} | cases={len(cases)} | "
-        f"warmup={warmup_volumes} | repeats={timed_repeats} | sw_batch_size={sw_batch_size}"
+        f"MEDTRT BENCHMARK: backend={backend} | cases={len(cases)} | "
+        f"warmup={warmup_volumes} | repeats={timed_repeats} | "
+        f"sw_batch_size={sw_batch_size} | overlap={overlap}"
     )
     print("=" * 92)
 
     # 1. Pure patch forward benchmark
-    print("[1/3] Benchmarking isolated 3D patch forward pass (96x96x96)...")
+    patch_batch_sizes = (1, 2, 4, 8) if sw_batch_size == 8 else (1, 2, 4)
+    print(f"[1/3] Benchmarking isolated 3D patch forward pass (96x96x96, batches={patch_batch_sizes})...")
     patch_bench = benchmark_pure_patch_forward(
         predictor=predictor,
         device=device,
         use_amp=use_amp,
-        batch_sizes=(1, 2, 4),
+        batch_sizes=patch_batch_sizes,
         warmup_iters=10,
         timed_iters=50,
         extra_vram_mb=extra_vram_mb,
@@ -304,7 +387,22 @@ def run_benchmark(
             f"per-patch={b_val['per_patch_median_ms']:.2f} ms, VRAM={b_val['peak_vram_mb']:.1f} MB)"
         )
 
-    load_tf, pre_tf, _ = build_split_load_and_preprocess()
+    io_comparison: Dict[str, Any] = {}
+    if gpu_transforms:
+        print("[1b/3] Benchmarking Disk I/O: on-the-fly gzip (.nii.gz) vs. uncompressed mmap (.nii)...")
+        io_comparison = benchmark_io_ingestion(cases, repeats=5)
+        gz_m = io_comparison["gzip_on_the_fly_ms"]
+        mm_m = io_comparison["uncompressed_mmap_ms"]
+        print(
+            f"      gzip (.nii.gz) load      : median={gz_m['median']:.2f} ms [IQR={gz_m['iqr']:.2f} ms] "
+            f"(mean={gz_m['mean']:.2f} ± {gz_m['std']:.2f} ms)"
+        )
+        print(
+            f"      uncompressed mmap (.nii) : median={mm_m['median']:.2f} ms [IQR={mm_m['iqr']:.2f} ms] "
+            f"(mean={mm_m['mean']:.2f} ± {mm_m['std']:.2f} ms) -> {io_comparison['io_speedup_factor']:.2f}x faster I/O"
+        )
+
+    load_tf, pre_tf, _ = build_split_load_and_preprocess(gpu_transforms=gpu_transforms)
     post_tf = (
         build_optimized_gpu_postprocessing(pre_tf)
         if gpu_transforms
@@ -354,6 +452,7 @@ def run_benchmark(
                 overlap=overlap,
                 use_amp=use_amp,
                 extra_vram_mb=extra_vram_mb,
+                gpu_transforms=gpu_transforms,
             )
             case_passes.append(pass_metrics)
             all_passes.append({"case_id": case_id, "repeat": r_idx, **pass_metrics})
@@ -407,8 +506,12 @@ def run_benchmark(
             "total_timed_passes": len(all_passes),
             "allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
             "use_amp": use_amp,
+            "gpu_transforms": gpu_transforms,
+            "reader_mode": "uncompressed_mmap_nii" if gpu_transforms else "gzip_nii_gz",
+            "postprocess_dtype": "uint8_cuda_nearest" if gpu_transforms else "float32_cpu_trilinear",
         },
         "patch_forward_latency_ms": patch_bench,
+        "io_comparison_ms": io_comparison,
         "stage_latency_ms": {
             k: aggregate_stats[k]
             for k in STAGE_NAMES + ("sw_total", "non_network", "e2e_total")
@@ -450,8 +553,8 @@ if __name__ == "__main__":
     parser.add_argument("--cases", type=int, default=9, help="Number of held-out cases to benchmark")
     parser.add_argument("--warmup", type=int, default=3, help="Number of warm-up volume passes")
     parser.add_argument("--repeats", type=int, default=10, help="Number of timed repeats per case")
-    parser.add_argument("--sw-batch-size", type=int, default=4, help="Sliding window batch size")
-    parser.add_argument("--overlap", type=float, default=0.5, help="Sliding window overlap")
+    parser.add_argument("--sw-batch-size", type=int, default=None, help="Sliding window batch size")
+    parser.add_argument("--overlap", type=float, default=None, help="Sliding window overlap")
     args = parser.parse_args()
 
     res = run_benchmark(

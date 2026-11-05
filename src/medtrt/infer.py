@@ -75,21 +75,25 @@ def build_inference_postprocessing(preprocessing: Compose) -> Compose:
 
 def build_optimized_gpu_postprocessing(preprocessing: Compose) -> Compose:
     """
-    Phase 5 Targeted Optimization:
-    Perform GPU argmax discretization (`AsDiscreted(argmax=True)`) on the 2-channel logits
-    BEFORE spatial inversion (`Invertd(nearest_interp=True)`) on CUDA (`cuda:0`), eliminating
-    2-channel host CPU trilinear interpolation overhead.
+    Phase 5 / Stage 2 Targeted Optimization:
+    1. Perform GPU argmax discretization (`AsDiscreted(argmax=True)`) on the 2-channel logits.
+    2. Convert the argmax output to `torch.uint8` on `cuda:0` BEFORE calling `Invertd`.
+    3. Execute nearest-neighbor spatial interpolation (`Invertd(nearest_interp=True, device="cuda:0")`)
+       directly on the CUDA tensor, and retain `torch.uint8` for 4x smaller D2H transfer.
     """
     return Compose(
         [
             AsDiscreted(keys=["pred"], argmax=True),
+            EnsureTyped(keys=["pred"], dtype=torch.uint8, device="cuda:0"),
             Invertd(
                 keys=["pred"],
                 transform=preprocessing,
                 orig_keys="image",
                 nearest_interp=True,
                 to_tensor=True,
+                device="cuda:0",
             ),
+            EnsureTyped(keys=["pred"], dtype=torch.uint8, device="cuda:0"),
         ]
     )
 
@@ -120,19 +124,14 @@ def infer_volume(
     """
     Execute full-volume preprocessing, sliding-window inference, and inverse spatial transform
     back to original NIfTI coordinate space.
-    When `gpu_transforms=True` (Phase 5 Targeted Optimization), spatial resampling (`Spacingd`),
-    intensity scaling (`ScaleIntensityRanged`), softmax (`Activationsd`), and 3D inverse
-    resampling (`Invertd`) execute on CUDA (`cuda:0`) instead of host CPU.
+    When `gpu_transforms=True` (Stage 2 Optimization), memory-mapped uncompressed NIfTI loading
+    (`load_nifti_mmap`), GPU spatial resampling (`Spacingd`), GPU intensity scaling (`ScaleIntensityRanged`),
+    and `uint8` CUDA nearest-neighbor `Invertd` execute on `cuda:0`.
     """
     target_device = torch.device(device)
     if gpu_transforms:
-        load_tf = Compose(
-            [
-                LoadImaged(keys=["image"]),
-                EnsureChannelFirstd(keys=["image"]),
-                EnsureTyped(keys=["image"], device=target_device),
-            ]
-        )
+        from medtrt.data import load_nifti_mmap
+
         pre_tf = Compose(
             [
                 Orientationd(keys=["image"], axcodes="RAS"),
@@ -148,7 +147,8 @@ def infer_volume(
             ]
         )
         post_tf = build_optimized_gpu_postprocessing(pre_tf)
-        data: Dict[str, Any] = load_tf({"image": str(image_path)})
+        data: Dict[str, Any] = load_nifti_mmap({"image": str(image_path)})
+        data["image"] = data["image"].to(target_device)
         data = pre_tf(data)
         inputs = data["image"].unsqueeze(0)
     else:
@@ -171,7 +171,7 @@ def infer_volume(
             logits = inferer(inputs=inputs, network=predictor)
 
     if gpu_transforms:
-        data["pred"] = logits[0].detach().float()
+        data["pred"] = logits[0].detach()
         out_data = post_tf(data)
         pred_mask_3d = out_data["pred"].squeeze(0).cpu().numpy()
     else:

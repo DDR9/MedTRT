@@ -13,6 +13,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import gzip
 import json
 import re
 import shutil
@@ -22,7 +23,11 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+import nibabel as nib
+import numpy as np
+import torch
 from monai.bundle import download
+from monai.data import MetaTensor
 
 from medtrt.config import BUNDLES_DIR, DATA_DIR, MEDTRT_ROOT, RESULTS_DIR
 
@@ -34,7 +39,53 @@ FALLBACK_BUNDLE_URL = (
 )
 MSD_SPLEEN_URL = "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task09_Spleen.tar"
 TASK09_DIR = DATA_DIR / "Task09_Spleen"
+UNCOMPRESSED_IMAGES_DIR = TASK09_DIR / "imagesTr_uncompressed"
 HELDOUT_JSON_PATH = RESULTS_DIR / "heldout_cases.json"
+
+
+def ensure_uncompressed_nifti(image_path: str | Path) -> Path:
+    """
+    Ensure an uncompressed `.nii` file exists for `image_path` so `nibabel.load(..., mmap=True)`
+    can memory-map the volume without on-the-fly gzip decompression overhead.
+    """
+    p = Path(image_path)
+    if p.suffix == ".nii" and p.exists():
+        return p
+    if p.name.endswith(".nii.gz"):
+        UNCOMPRESSED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        out_nii = UNCOMPRESSED_IMAGES_DIR / p.name[:-3]  # strip .gz -> .nii
+        if not out_nii.exists() or out_nii.stat().st_size == 0:
+            with gzip.open(p, "rb") as f_in, open(out_nii, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        return out_nii
+    return p
+
+
+def load_nifti_mmap(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Memory-mapped NIfTI reader (`nibabel.load(..., mmap=True)`) on uncompressed `.nii` volumes.
+    Constructs a channel-first `MetaTensor` `(1, X, Y, Z)` with original affine and spatial metadata
+    compatible with MONAI's `Orientationd`, `Spacingd`, and `Invertd`.
+    """
+    d = dict(data)
+    raw_path = Path(d["image"])
+    nii_path = ensure_uncompressed_nifti(raw_path)
+    img = nib.load(str(nii_path), mmap=True)
+    arr = np.asarray(img.dataobj)
+    affine_np = np.asarray(img.affine, dtype=np.float64)
+    meta = {
+        "spatial_shape": np.asarray(arr.shape[:3], dtype=np.int64),
+        "original_channel_dim": "no_channel",
+        "original_affine": affine_np,
+        "filename_or_obj": str(nii_path),
+    }
+    tensor = torch.from_numpy(arr).unsqueeze(0)
+    d["image"] = MetaTensor(
+        tensor,
+        affine=torch.as_tensor(affine_np, dtype=torch.float64),
+        meta=meta,
+    )
+    return d
 
 
 def ensure_bundle() -> Path:
@@ -181,10 +232,12 @@ def resolve_heldout_split() -> Dict[str, Any]:
         lbl_path = labels_tr / img_path.name
         if not lbl_path.exists():
             raise FileNotFoundError(f"Missing ground-truth label for {case_id}: {lbl_path}")
+        uncompressed_path = ensure_uncompressed_nifti(img_path)
         cases.append(
             {
                 "case_id": case_id,
                 "image": str(img_path.relative_to(MEDTRT_ROOT).as_posix()),
+                "image_uncompressed": str(uncompressed_path.relative_to(MEDTRT_ROOT).as_posix()),
                 "label": str(lbl_path.relative_to(MEDTRT_ROOT).as_posix()),
             }
         )

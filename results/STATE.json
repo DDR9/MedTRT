@@ -1,5 +1,5 @@
 {
-  "current_phase": "PHASE_8_COMPLETE",
+  "current_phase": "PHASE_8_STAGE_2_COMPLETE",
   "phase_0_status": "PASS",
   "phase_1_status": "PASS",
   "phase_2_status": "PASS",
@@ -9,7 +9,24 @@
   "phase_6_status": "PASS",
   "phase_7_status": "PASS",
   "phase_8_status": "PASS",
-  "updated_at": "2026-11-05T09:54:40Z",
+  "stage_2_optimizations": {
+    "status": "PASS",
+    "overlap": 0.25,
+    "sw_batch_size": 8,
+    "postprocess_dtype": "uint8_cuda_nearest",
+    "reader_mode": "uncompressed_mmap_nii",
+    "median_e2e_ms": 198.281,
+    "median_sw_network_ms": 21.3911,
+    "median_postprocess_ms": 68.4437,
+    "median_load_ms": 2.6997,
+    "io_gzip_median_ms": 720.03,
+    "io_mmap_median_ms": 4.53,
+    "io_speedup_factor": 159.06,
+    "mean_heldout_dice": 0.960661,
+    "target_e2e_under_500ms": true,
+    "target_dice_ge_0_960": true
+  },
+  "updated_at": "2026-11-05T18:04:50Z",
   "artifacts": {
     "env_json": "results/env.json",
     "heldout_cases_json": "results/heldout_cases.json",

@@ -63,8 +63,8 @@ def compute_foreground_dice(pred_mask_3d: np.ndarray, gt_mask_3d: np.ndarray) ->
 def evaluate_backend(
     backend: str = "pytorch_fp32",
     predictor: Callable[[torch.Tensor], torch.Tensor] | None = None,
-    sw_batch_size: int = 4,
-    overlap: float = 0.5,
+    sw_batch_size: int | None = None,
+    overlap: float | None = None,
 ) -> Dict[str, Any]:
     """
     Run held-out evaluation for `backend` and write `results/eval_<backend>.csv`.
@@ -78,6 +78,11 @@ def evaluate_backend(
     device = torch.device("cuda:0")
     use_amp = False
     gpu_transforms = False
+
+    if sw_batch_size is None:
+        sw_batch_size = 8 if backend == "trt_fp16_optimized" else 4
+    if overlap is None:
+        overlap = 0.25 if backend == "trt_fp16_optimized" else 0.5
 
     # Configure backend precision settings
     if backend == "pytorch_fp32":

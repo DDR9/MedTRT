@@ -20,46 +20,55 @@
     {
       "case_id": "spleen_56",
       "image": "data/Task09_Spleen/imagesTr/spleen_56.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_56.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_56.nii.gz"
     },
     {
       "case_id": "spleen_59",
       "image": "data/Task09_Spleen/imagesTr/spleen_59.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_59.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_59.nii.gz"
     },
     {
       "case_id": "spleen_6",
       "image": "data/Task09_Spleen/imagesTr/spleen_6.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_6.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_6.nii.gz"
     },
     {
       "case_id": "spleen_60",
       "image": "data/Task09_Spleen/imagesTr/spleen_60.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_60.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_60.nii.gz"
     },
     {
       "case_id": "spleen_61",
       "image": "data/Task09_Spleen/imagesTr/spleen_61.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_61.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_61.nii.gz"
     },
     {
       "case_id": "spleen_62",
       "image": "data/Task09_Spleen/imagesTr/spleen_62.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_62.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_62.nii.gz"
     },
     {
       "case_id": "spleen_63",
       "image": "data/Task09_Spleen/imagesTr/spleen_63.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_63.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_63.nii.gz"
     },
     {
       "case_id": "spleen_8",
       "image": "data/Task09_Spleen/imagesTr/spleen_8.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_8.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_8.nii.gz"
     },
     {
       "case_id": "spleen_9",
       "image": "data/Task09_Spleen/imagesTr/spleen_9.nii.gz",
+      "image_uncompressed": "data/Task09_Spleen/imagesTr_uncompressed/spleen_9.nii",
       "label": "data/Task09_Spleen/labelsTr/spleen_9.nii.gz"
     }
   ]
