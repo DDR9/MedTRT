@@ -24,7 +24,7 @@ sys.path.insert(0, str(APP))
 
 from dashboard import data  # noqa: E402
 
-PAGES = ("overview", "speedup", "latency", "network", "accuracy", "errors", "claims", "method")
+PAGES = ("overview", "speedup", "latency", "network", "accuracy", "errors", "constructed", "implications", "claims", "method")
 CASES = ("case_a", "case_b", "case_c", "case_d")
 
 

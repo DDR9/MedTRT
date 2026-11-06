@@ -10,10 +10,10 @@ A pretrained MONAI 3D UNet segments the spleen in abdominal CT. All timings are 
 
 | Measure | Fast profile (`trt_fp16_optimized`) | Notes |
 | :--- | :--- | :--- |
-| End-to-end latency | `68.9 ms` median | Per-case medians `36`-`108 ms`; slowest of 90 passes `123 ms` |
-| Speedup vs host-path PyTorch | `42.9x` | `2952 ms` baseline with CPU inverse transform and gzip reads |
-| Speedup vs GPU-path PyTorch | `5.20x` | `358 ms` with the same GPU pipeline and bundle windows, no TensorRT |
-| TensorRT alone, same pipeline and windows | `3.72x` end to end | `358` to `96 ms` |
+| End-to-end latency | `60.8 ms` median | Per-case medians `34`-`102 ms`; slowest of 90 passes `115 ms` |
+| Speedup vs host-path PyTorch | `54.9x` | `3341 ms` baseline with CPU inverse transform and gzip reads |
+| Speedup vs GPU-path PyTorch | `6.18x` | `376 ms` with the same GPU pipeline and bundle windows, no TensorRT |
+| TensorRT alone, same pipeline and windows | `3.95x` end to end | `376` to `95 ms` |
 | Mean Dice | `0.964778` | True FP32 reference `0.965233` |
 | Mean / max per-case Dice change vs FP32 | `0.001669` / `0.005563` | `1` of `9` cases at or over `0.005` |
 | Volume bias vs FP32 | `+0.12 cm³` (`+0.04%`) | 95% CI `[-0.79, +1.03]`; `5` of `9` cases positive |
@@ -23,7 +23,7 @@ A pretrained MONAI 3D UNet segments the spleen in abdominal CT. All timings are 
 
 | Target | Measured | Status |
 | :--- | :---: | :---: |
-| Every pass under 500 ms | Slowest pass `122.6 ms` | PASS |
+| Every pass under 500 ms | Slowest pass `115.3 ms` | PASS |
 | Mean Dice at least 0.960 | `0.964778` | PASS |
 | Mean absolute Dice change under 0.005 | `0.001669` | PASS |
 | Like-for-like (`trt_fp16_cuda`) every case Dice change under 0.005 | Max `0.000029` (`trt_fp16_optimized` max `0.005563`) | PASS |
@@ -34,29 +34,29 @@ Most of the end-to-end gain is not TensorRT. Each row below changes one thing, u
 
 | Configuration | E2E median (ms) | Slowest pass (ms) | vs first row | `sw_network` (ms) | Mean Dice |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| Host path, PyTorch TF32 | `2992.5` | `6339.3` | `1.00x` | `239.3` | `0.965228` |
-| Host path, TensorRT only | `2923.0` | `6015.0` | `1.02x` | `170.3` | `0.965226` |
-| GPU transforms, gzip read, PyTorch TF32 | `706.9` | `1404.3` | `4.23x` | `201.1` | `0.965228` |
-| GPU transforms, gzip read, TensorRT | `564.3` | `1252.9` | `5.30x` | `47.2` | `0.965228` |
-| GPU transforms, .nii read, PyTorch TF32 | `363.3` | `686.1` | `8.24x` | `195.9` | `0.965228` |
-| GPU transforms, .nii read, TensorRT | `274.8` | `472.5` | `10.89x` | `54.0` | `0.965228` |
-| Fast windows, PyTorch TF32 | `320.6` | `540.4` | `9.33x` | `111.9` | `0.964771` |
-| Fast windows, TensorRT | `218.5` | `374.2` | `13.70x` | `23.5` | `0.964767` |
-| Fast windows, TensorRT, nearest-label inverse | `219.0` | `361.6` | `13.66x` | `24.1` | `0.960230` |
+| Host path, PyTorch TF32 | `2944.2` | `6114.1` | `1.00x` | `244.0` | `0.965228` |
+| Host path, TensorRT only | `3063.1` | `5954.3` | `0.96x` | `267.3` | `0.965226` |
+| GPU transforms, gzip read, PyTorch TF32 | `710.9` | `1429.2` | `4.14x` | `200.3` | `0.965228` |
+| GPU transforms, gzip read, TensorRT | `650.1` | `1313.3` | `4.53x` | `47.1` | `0.965228` |
+| GPU transforms, .nii read, PyTorch TF32 | `374.3` | `679.3` | `7.87x` | `195.2` | `0.965228` |
+| GPU transforms, .nii read, TensorRT | `233.6` | `403.2` | `12.60x` | `47.0` | `0.965228` |
+| Fast windows, PyTorch TF32 | `261.1` | `442.2` | `11.28x` | `84.0` | `0.964771` |
+| Fast windows, TensorRT | `194.1` | `311.4` | `15.17x` | `20.7` | `0.964767` |
+| Fast windows, TensorRT, nearest-label inverse | `178.6` | `301.4` | `16.49x` | `20.3` | `0.960230` |
 
-- **Keeping the inverse transform on the GPU is the largest single change.** The reference `inference.json` already keeps predictions on the GPU, so the host path overstates the cost of a default deployment. With gzip reads, this alone moves PyTorch from `2992` to `707 ms`.
-- **Removing gzip from the critical path** moves PyTorch to `363 ms`. It assumes volumes were decompressed ahead of time.
-- **TensorRT** then takes the same pipeline from `363` to `275 ms`. PyTorch without TensorRT already meets the 500 ms target.
-- **Inverting class probabilities rather than hard labels matters for accuracy.** Nearest-label inversion scores `0.960230` Dice at `219 ms`. Trilinear scores `0.964767` at `218 ms`.
+- **Keeping the inverse transform on the GPU is the largest single change.** The reference `inference.json` already keeps predictions on the GPU, so the host path overstates the cost of a default deployment. With gzip reads, this alone moves PyTorch from `2944` to `711 ms`.
+- **Removing gzip from the critical path** moves PyTorch to `374 ms`. It assumes volumes were decompressed ahead of time.
+- **TensorRT** then takes the same pipeline from `374` to `234 ms`. PyTorch without TensorRT already meets the 500 ms target.
+- **Inverting class probabilities rather than hard labels matters for accuracy.** Nearest-label inversion scores `0.960230` Dice at `179 ms`. Trilinear scores `0.964767` at `194 ms`.
 
 ## 3. Method
 
 | Component | Value |
 | :--- | :--- |
 | GPU | `NVIDIA GeForce RTX 5080 Laptop GPU`, compute capability `12.0 (sm_120)`, `15.92 GB` |
-| Driver | `591.44`, `unknown` mode, CUDA `12.8`, cuDNN `9.19.0` |
+| Driver | `591.44`, `WDDM` mode, CUDA `12.8`, cuDNN `9.19.0` |
 | Software | PyTorch `2.11.0+cu128`, MONAI `1.6.1`, TensorRT `10.16.1.11`, Python `3.11.15` |
-| OS | `Windows 10 (10.0.26300)` |
+| OS | `Windows 11 (10.0.26300)` |
 | ONNX export | Opset `17`, max abs diff vs FP32 `2.670e-05` on one synthetic batch |
 | TensorRT engine | FP16, dynamic batch 1 to 8, optimized for 2, `13.70 MB` |
 
@@ -70,19 +70,19 @@ Most of the end-to-end gain is not TensorRT. Each row below changes one thing, u
 
 | Profile | Overlap / batch | Patch B=1 (ms) | Patch B=4 (ms) | `sw_network` (ms) | E2E median [IQR] (ms) | Slowest (ms) | Peak VRAM (MB) | Mean Dice ± SD | vs `pytorch_fp32` |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `pytorch_fp32_strict` | `0.5` / `4` | `6.68` | `19.49` | `379.9` | `3049.8` [`3235.4`] | `6562` | `490` | `0.965233` ± `0.0117` | `0.97x` |
-| `pytorch_fp32` | `0.5` / `4` | `3.77` | `12.68` | `254.6` | `2952.0` [`2970.8`] | `6208` | `487` | `0.965228` ± `0.0117` | `1.00x` |
-| `pytorch_tf32` | `0.5` / `4` | `3.77` | `12.68` | `254.6` | `2952.0` [`2970.8`] | `6208` | `487` | `0.965228` ± `0.0117` | `1.00x` |
-| `pytorch_amp` | `0.5` / `4` | `5.72` | `14.50` | `213.4` | `2916.1` [`2954.5`] | `6364` | `457` | `0.965217` ± `0.0118` | `1.01x` |
-| `pytorch_fp16` | `0.5` / `4` | `4.86` | `11.13` | `213.9` | `2885.5` [`2822.2`] | `6230` | `458` | `0.965231` ± `0.0118` | `1.02x` |
-| `trt_fp32` | `0.5` / `4` | `3.12` | `11.78` | `239.8` | `2940.0` [`3003.2`] | `6387` | `368` | `0.965233` ± `0.0117` | `1.00x` |
-| `trt_fp16_unfolded` | `0.5` / `4` | `0.98` | `3.09` | `176.7` | `2866.4` [`2909.5`] | `6115` | `359` | `0.965722` ± `0.0120` | `1.03x` |
-| `trt_fp16` | `0.5` / `4` | `0.88` | `3.01` | `167.1` | `2880.3` [`2893.9`] | `6094` | `359` | `0.965226` ± `0.0117` | `1.02x` |
-| `pytorch_tf32_gpu` | `0.5` / `4` | `3.77` | `11.57` | `197.0` | `357.9` [`244.6`] | `631` | `2307` | `0.965227` ± `0.0117` | `8.25x` |
-| `trt_fp16_gpu` | `0.5` / `4` | `0.94` | `3.18` | `47.6` | `215.5` [`173.7`] | `440` | `2301` | `0.965228` ± `0.0117` | `13.70x` |
-| `trt_fp16_cuda` | `0.5` / `4` | `1.01` | `3.07` | `49.0` | `96.3` [`58.9`] | `233` | `455` | `0.965229` ± `0.0117` | `30.67x` |
-| `trt_fp16_optimized` | `0.25` / `8` | `1.08` | `2.98` | `24.8` | `68.9` [`50.5`] | `123` | `522` | `0.964778` ± `0.0135` | `42.86x` |
-| `trt_fp16_nn` | `0.25` / `8` | `1.07` | `3.00` | `20.8` | `178.4` [`141.3`] | `399` | `2149` | `0.960230` ± `0.0139` | `16.55x` |
+| `pytorch_fp32_strict` | `0.5` / `4` | `6.96` | `22.36` | `375.6` | `3122.2` [`2981.3`] | `7760` | `490` | `0.965233` ± `0.0117` | `1.07x` |
+| `pytorch_fp32` | `0.5` / `4` | `3.90` | `15.95` | `260.8` | `3341.1` [`3180.1`] | `6179` | `487` | `0.965228` ± `0.0117` | `1.00x` |
+| `pytorch_tf32` | `0.5` / `4` | `3.90` | `15.95` | `260.8` | `3341.1` [`3180.1`] | `6179` | `487` | `0.965228` ± `0.0117` | `1.00x` |
+| `pytorch_amp` | `0.5` / `4` | `5.40` | `15.69` | `221.6` | `3145.2` [`3538.9`] | `7090` | `457` | `0.965217` ± `0.0118` | `1.06x` |
+| `pytorch_fp16` | `0.5` / `4` | `4.48` | `14.89` | `224.6` | `2996.7` [`2881.1`] | `6024` | `458` | `0.965231` ± `0.0118` | `1.11x` |
+| `trt_fp32` | `0.5` / `4` | `3.24` | `13.36` | `241.5` | `2835.6` [`2966.3`] | `6601` | `368` | `0.965233` ± `0.0117` | `1.18x` |
+| `trt_fp16_unfolded` | `0.5` / `4` | `1.00` | `3.29` | `176.0` | `2787.9` [`2906.4`] | `5874` | `359` | `0.965722` ± `0.0120` | `1.20x` |
+| `trt_fp16` | `0.5` / `4` | `1.08` | `3.79` | `172.8` | `2967.0` [`2849.9`] | `6067` | `359` | `0.965226` ± `0.0117` | `1.13x` |
+| `pytorch_tf32_gpu` | `0.5` / `4` | `4.24` | `16.80` | `207.0` | `375.9` [`241.2`] | `747` | `2307` | `0.965227` ± `0.0117` | `8.89x` |
+| `trt_fp16_gpu` | `0.5` / `4` | `0.97` | `3.25` | `48.6` | `218.0` [`168.5`] | `429` | `2301` | `0.965228` ± `0.0117` | `15.32x` |
+| `trt_fp16_cuda` | `0.5` / `4` | `0.94` | `3.48` | `49.6` | `95.1` [`55.7`] | `241` | `455` | `0.965229` ± `0.0117` | `35.13x` |
+| `trt_fp16_optimized` | `0.25` / `8` | `1.00` | `3.20` | `26.2` | `60.8` [`49.0`] | `115` | `522` | `0.964778` ± `0.0135` | `54.92x` |
+| `trt_fp16_nn` | `0.25` / `8` | `1.04` | `3.10` | `21.0` | `181.3` [`145.8`] | `400` | `2149` | `0.960230` ± `0.0139` | `18.42x` |
 
 ![Stage latency breakdown](docs/figures/stage_breakdown.png)
 
@@ -92,31 +92,31 @@ Most of the end-to-end gain is not TensorRT. Each row below changes one thing, u
 
 | Stage (median ms) | `pytorch_fp32_strict` | `pytorch_fp32` | `pytorch_tf32` | `pytorch_amp` | `pytorch_fp16` | `trt_fp32` | `trt_fp16_unfolded` | `trt_fp16` | `pytorch_tf32_gpu` | `trt_fp16_gpu` | `trt_fp16_cuda` | `trt_fp16_optimized` | `trt_fp16_nn` |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `load` | `363.9` | `421.6` | `421.6` | `416.3` | `331.7` | `369.4` | `398.1` | `365.3` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` |
-| `h2d` | `3.9` | `3.8` | `3.8` | `4.2` | `4.8` | `3.7` | `16.5` | `14.0` | `37.3` | `37.4` | `27.6` | `27.7` | `36.6` |
-| `ingest` | `367.4` | `424.7` | `424.7` | `419.7` | `340.1` | `373.0` | `406.5` | `385.1` | `38.8` | `38.9` | `29.2` | `29.1` | `38.1` |
-| `preprocess` | `288.0` | `286.4` | `286.4` | `271.7` | `281.6` | `276.7` | `273.2` | `266.8` | `54.4` | `43.9` | `1.3` | `1.3` | `41.7` |
-| `sw_network` | `379.9` | `254.6` | `254.6` | `213.4` | `213.9` | `239.8` | `176.7` | `167.1` | `197.0` | `47.6` | `49.0` | `24.8` | `20.8` |
-| `sw_aggregate` | `8.4` | `8.0` | `8.0` | `9.1` | `9.6` | `8.9` | `36.7` | `36.0` | `6.5` | `6.5` | `6.1` | `4.5` | `4.1` |
-| `postprocess` | `2024.8` | `1990.4` | `1990.4` | `2013.6` | `1993.2` | `1981.5` | `1994.5` | `1993.9` | `62.2` | `71.1` | `2.6` | `2.8` | `69.3` |
-| `e2e_total` | `3049.8` | `2952.0` | `2952.0` | `2916.1` | `2885.5` | `2940.0` | `2866.4` | `2880.3` | `357.9` | `215.5` | `96.3` | `68.9` | `178.4` |
-| `wall_ms` | `3050.0` | `2952.1` | `2952.1` | `2916.2` | `2885.6` | `2940.1` | `2866.5` | `2880.5` | `357.9` | `215.5` | `96.5` | `69.0` | `178.5` |
+| `load` | `414.9` | `524.6` | `524.6` | `543.8` | `383.6` | `382.1` | `377.0` | `419.1` | `1.7` | `1.6` | `1.6` | `1.5` | `1.6` |
+| `h2d` | `4.0` | `4.2` | `4.2` | `6.1` | `4.6` | `3.8` | `14.6` | `13.7` | `35.1` | `29.0` | `25.5` | `23.1` | `30.0` |
+| `ingest` | `418.5` | `528.8` | `528.8` | `552.5` | `387.7` | `385.6` | `392.8` | `427.5` | `37.2` | `30.9` | `27.3` | `24.8` | `31.6` |
+| `preprocess` | `268.6` | `284.4` | `284.4` | `294.0` | `264.7` | `263.5` | `259.7` | `269.4` | `52.8` | `46.5` | `1.4` | `1.4` | `43.2` |
+| `sw_network` | `375.6` | `260.8` | `260.8` | `221.6` | `224.6` | `241.5` | `176.0` | `172.8` | `207.0` | `48.6` | `49.6` | `26.2` | `21.0` |
+| `sw_aggregate` | `8.0` | `8.2` | `8.2` | `13.0` | `13.9` | `9.1` | `33.9` | `32.9` | `6.6` | `6.4` | `6.0` | `4.3` | `4.4` |
+| `postprocess` | `2017.4` | `2195.3` | `2195.3` | `2084.5` | `2016.7` | `1947.5` | `1946.9` | `2035.3` | `68.7` | `81.2` | `2.6` | `2.4` | `74.0` |
+| `e2e_total` | `3122.2` | `3341.1` | `3341.1` | `3145.2` | `2996.7` | `2835.6` | `2787.9` | `2967.0` | `375.9` | `218.0` | `95.1` | `60.8` | `181.3` |
+| `wall_ms` | `3122.3` | `3341.2` | `3341.2` | `3145.3` | `2996.8` | `2835.7` | `2788.0` | `2967.1` | `375.9` | `218.1` | `95.2` | `60.9` | `181.5` |
 
 ### Per-case latency, fast profile
 
-`69 ms` is a median across cases of different sizes: `9` of `9` cases have a median under 200 ms.
+`61 ms` is a median across cases of different sizes: `9` of `9` cases have a median under 200 ms.
 
 | Case | Shape | Windows | E2E median (ms) | Slowest (ms) | Peak VRAM (MB) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `spleen_56` | `512x512x33` | `18` | `36.0` | `38.0` | `285` |
-| `spleen_59` | `512x512x50` | `50` | `71.6` | `79.7` | `404` |
-| `spleen_6` | `512x512x135` | `50` | `108.2` | `122.6` | `452` |
-| `spleen_60` | `512x512x97` | `64` | `101.8` | `109.7` | `522` |
-| `spleen_61` | `512x512x101` | `64` | `104.8` | `109.6` | `521` |
-| `spleen_62` | `512x512x80` | `27` | `70.1` | `73.6` | `394` |
-| `spleen_63` | `512x512x60` | `32` | `63.3` | `67.5` | `362` |
-| `spleen_8` | `512x512x31` | `32` | `47.9` | `50.1` | `308` |
-| `spleen_9` | `512x512x41` | `32` | `52.5` | `54.7` | `296` |
+| `spleen_56` | `512x512x33` | `18` | `34.3` | `37.4` | `285` |
+| `spleen_59` | `512x512x50` | `50` | `75.7` | `83.4` | `404` |
+| `spleen_6` | `512x512x135` | `50` | `100.8` | `103.2` | `452` |
+| `spleen_60` | `512x512x97` | `64` | `101.6` | `111.0` | `522` |
+| `spleen_61` | `512x512x101` | `64` | `100.8` | `115.3` | `521` |
+| `spleen_62` | `512x512x80` | `27` | `59.6` | `63.6` | `394` |
+| `spleen_63` | `512x512x60` | `32` | `58.5` | `62.2` | `362` |
+| `spleen_8` | `512x512x31` | `32` | `46.8` | `48.7` | `308` |
+| `spleen_9` | `512x512x41` | `32` | `50.7` | `52.2` | `296` |
 
 ## 5. Network-only comparison
 
@@ -124,14 +124,14 @@ These runs use identical windows on every backend, in a sustained loop. Fast win
 
 | Backend | Bundle windows (ms) | Fast windows (ms) | TensorRT speedup, bundle windows |
 | :--- | :---: | :---: | :---: |
-| PyTorch FP32 | `315.5` | `219.1` | `1.08x` |
-| PyTorch TF32 | `305.6` | `136.4` | `1.05x` |
-| PyTorch TF32, `cudnn.benchmark` | `305.4` | `139.7` | `1.05x` |
-| PyTorch AMP | `237.4` | `415.5` | `0.81x` |
-| PyTorch AMP, `cudnn.benchmark` | `694.1` | `484.3` | `2.38x` |
-| TensorRT FP16 | `292.2` | `239.4` | `1.00x` |
+| PyTorch FP32 | `311.5` | `139.6` | `5.55x` |
+| PyTorch TF32 | `207.3` | `88.4` | `3.69x` |
+| PyTorch TF32, `cudnn.benchmark` | `208.7` | `91.3` | `3.72x` |
+| PyTorch AMP | `172.3` | `76.1` | `3.07x` |
+| PyTorch AMP, `cudnn.benchmark` | `175.6` | `75.2` | `3.13x` |
+| TensorRT FP16 | `56.1` | `27.0` | `1.00x` |
 
-Inside the real pipeline, TensorRT is `3.63x` faster than TF32 at bundle windows and `4.75x` at fast windows.
+Inside the real pipeline, TensorRT is `4.16x` faster than TF32 at bundle windows and `4.07x` at fast windows.
 
 ### GPU clock state
 
@@ -139,8 +139,8 @@ Inside the real pipeline, TensorRT is `3.63x` faster than TF32 at bundle windows
 
 | Backend | Back-to-back (ms) | After 3 s idle (ms) | Inflation |
 | :--- | :---: | :---: | :---: |
-| `trt` | `290.7` | `328.0` | `1.13x` |
-| `tf32` | `1119.7` | `1267.6` | `1.13x` |
+| `trt` | `56.5` | `132.0` | `2.34x` |
+| `tf32` | `200.3` | `217.3` | `1.09x` |
 
 ## 6. Ingestion
 
@@ -148,9 +148,9 @@ Warm OS page cache. `mmap` returns before reading, so only the right-hand column
 
 | Read path | Read call (ms) | Through to GPU (ms) |
 | :--- | :---: | :---: |
-| `.nii.gz` with `LoadImaged` | `388.4` | `430.8` |
-| `.nii`, eager read | `207.1` | `249.4` |
-| `.nii`, `mmap` (lazy) | `3.2` | `47.2` |
+| `.nii.gz` with `LoadImaged` | `387.5` | `430.1` |
+| `.nii`, eager read | `210.4` | `252.6` |
+| `.nii`, `mmap` (lazy) | `3.3` | `48.5` |
 
 Resampling runs on the GPU in `float64`, which is MONAI's default and is slow on GeForce hardware. Only the final mask copy is `uint8`.
 
@@ -158,10 +158,10 @@ Resampling runs on the GPU in `float64`, which is MONAI's default and is slow on
 
 | Profile | `sw_network` (ms) | E2E (ms) | Network share | Max E2E gain from a faster network |
 | :--- | :---: | :---: | :---: | :---: |
-| `pytorch_fp32` | `254.6` | `2952.0` | `8.6%` | `1.09x` |
-| `trt_fp16` | `167.1` | `2880.3` | `5.8%` | `1.06x` |
-| `pytorch_tf32_gpu` | `197.0` | `357.9` | `55.1%` | `2.22x` |
-| `trt_fp16_optimized` | `24.8` | `68.9` | `36.0%` | `1.56x` |
+| `pytorch_fp32` | `260.8` | `3341.1` | `7.8%` | `1.08x` |
+| `trt_fp16` | `172.8` | `2967.0` | `5.8%` | `1.06x` |
+| `pytorch_tf32_gpu` | `207.0` | `375.9` | `55.1%` | `2.23x` |
+| `trt_fp16_optimized` | `26.2` | `60.8` | `43.1%` | `1.76x` |
 
 Once the network is a small share of end-to-end time, a faster network barely moves the total.
 
@@ -171,18 +171,18 @@ Uses the fast profile's own post-processing, with 5 timed passes per case on a h
 
 | Overlap | Batch | Median (ms) | IQR (ms) | Added VRAM (MB) | Mean Dice | Pareto-optimal | Fast profile |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `0.25` | `1` | `42.3` | `23.5` | `791` | `0.964778` |  |  |
-| `0.25` | `2` | `33.2` | `20.6` | `809` | `0.964778` |  |  |
-| `0.25` | `4` | `30.4` | `18.6` | `843` | `0.964778` | yes |  |
-| `0.25` | `8` | `32.6` | `21.0` | `910` | `0.964778` |  | yes |
-| `0.50` | `1` | `88.7` | `32.9` | `791` | `0.965229` |  |  |
-| `0.50` | `2` | `71.4` | `53.0` | `808` | `0.965229` |  |  |
-| `0.50` | `4` | `66.5` | `23.8` | `842` | `0.965229` | yes |  |
-| `0.50` | `8` | `69.3` | `30.8` | `909` | `0.965229` |  |  |
-| `0.75` | `1` | `410.3` | `315.6` | `791` | `0.965173` |  |  |
-| `0.75` | `2` | `332.3` | `312.5` | `808` | `0.965173` |  |  |
-| `0.75` | `4` | `334.6` | `336.1` | `842` | `0.965173` |  |  |
-| `0.75` | `8` | `424.5` | `411.6` | `909` | `0.965173` |  |  |
+| `0.25` | `1` | `39.8` | `26.0` | `791` | `0.964778` |  |  |
+| `0.25` | `2` | `32.3` | `19.0` | `808` | `0.964778` |  |  |
+| `0.25` | `4` | `30.6` | `19.0` | `842` | `0.964778` | yes |  |
+| `0.25` | `8` | `31.6` | `21.2` | `909` | `0.964778` |  | yes |
+| `0.50` | `1` | `84.8` | `34.3` | `791` | `0.965229` |  |  |
+| `0.50` | `2` | `69.7` | `25.3` | `808` | `0.965229` |  |  |
+| `0.50` | `4` | `66.6` | `19.8` | `842` | `0.965229` | yes |  |
+| `0.50` | `8` | `71.8` | `50.0` | `909` | `0.965229` |  |  |
+| `0.75` | `1` | `296.9` | `284.0` | `791` | `0.965173` |  |  |
+| `0.75` | `2` | `262.0` | `215.6` | `808` | `0.965173` |  |  |
+| `0.75` | `4` | `244.7` | `217.1` | `842` | `0.965173` |  |  |
+| `0.75` | `8` | `260.2` | `243.8` | `909` | `0.965173` |  |  |
 
 ![Sliding-window sweep](docs/figures/pareto_sweep.png)
 
@@ -209,7 +209,7 @@ TensorRT FP16 shows no systematic volume shift at bundle windows: `+0.001 cm³`,
 
 ### The BatchNorm fold
 
-The exported ONNX graph keeps `BatchNorm` after each `ConvTranspose3d`. Layer `model.2.0.adn.N` applies a shift of `81.8`, a magnitude where FP16 values are spaced `0.0625` apart. Folding these layers into the preceding `ConvTranspose3d` in float64 before export changes FP32 logits by at most `1.4e-05`, so it does not change the model. Both engines below run the same inputs and windows, compared with FP32 on the unmodified bundle weights.
+The exported ONNX graph keeps `BatchNorm` after each `ConvTranspose3d`. Layer `model.2.0.adn.N` applies a shift of `81.8`, a magnitude where FP16 values are spaced `0.0625` apart. Folding these layers into the preceding `ConvTranspose3d` in float64 before export changes FP32 logits by at most `1.3e-05`, so it does not change the model. Both engines below run the same inputs and windows, compared with FP32 on the unmodified bundle weights.
 
 | Engine | Mean Dice | Mean abs ΔDice | Volume bias (cm³) | Volume larger than FP32 |
 | :--- | :---: | :---: | :---: | :---: |

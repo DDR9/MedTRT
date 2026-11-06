@@ -6,14 +6,14 @@
 
 ## 1. Four Quantified Resume Bullets — NVIDIA (GPU Computing, CUDA C++, TensorRT, Performance Engineering)
 
-1. **End-to-End 3D Medical Imaging Pipeline Acceleration (`42.9×` / `44.3×` Speedup):**
-   Architected a zero-copy GPU 3D CT segmentation pipeline in PyTorch, TensorRT 10.16, and CUDA C++17 on an RTX 5080 (`sm_120`), reducing full-volume median end-to-end latency from **`3050 ms`** (strict FP32) / **`2952 ms`** (default TF32) to **`96.3 ms`** at identical sliding-window geometry (**`30.7×` speedup**) and **`68.9 ms`** (`14.5 volumes/s`, **`42.9×` speedup**) at Pareto-optimal window settings.
+1. **End-to-End 3D Medical Imaging Pipeline Acceleration (`54.9×` / `51.3×` Speedup):**
+   Architected a zero-copy GPU 3D CT segmentation pipeline in PyTorch, TensorRT 10.16, and CUDA C++17 on an RTX 5080 (`sm_120`), reducing full-volume median end-to-end latency from **`3122 ms`** (strict FP32) / **`3341 ms`** (default TF32) to **`95.1 ms`** at identical sliding-window geometry (**`35.1×` speedup**) and **`60.8 ms`** (`16.4 volumes/s`, **`54.9×` speedup**) at Pareto-optimal window settings.
 2. **Custom CUDA C++17 3D Affine Resampling & Fused Postprocessing Kernels (`21×`–`125×` Kernel Speedup, `50.8×` VRAM Reduction):**
    Authored 9 custom CUDA C++17 kernels (`cuda/medical_kernels.cu`, `50–100%` SM occupancy, `0 B` local register spills) that compute $3\times 4$ voxel-to-voxel affine coordinates in registers rather than materializing MONAI's 1–2 GB 3D coordinate meshgrids, accelerating 3D CT preprocessing by **`21.4×`** (`40.9 ms -> 1.92 ms`, **`7.1×` lower VRAM**) and 3D trilinear inverse postprocessing by **`124.9×`** (`118.8 ms -> 0.95 ms`, **`50.8×` lower VRAM**) with **`100.00000%` exact voxel agreement**.
 3. **TensorRT 10.x FP16 Numerical Stabilization via FP64 `ConvTranspose3d + BatchNorm3d` Folding (`35.6×` Lower Logit Error):**
    Diagnosed an asymmetric ONNX constant-folding omission where unfused decoder `ConvTranspose3d + BatchNorm3d` layers (`shift = -81.79` at FP16 $\text{ULP} = 0.0625$) caused catastrophic FP16 cancellation; implemented analytical FP64 weight folding prior to export, reducing TensorRT FP16 mean absolute logit drift by **`35.6×`** (`0.1377 -> 0.00387`) and cross-backend organ volume bias by **`620×`** (`+1.675 cm³ -> +0.001 cm³`).
 4. **NVTX Stage Instrumentation, Non-Default Stream Execution & Amdahl Bottleneck Analysis:**
-   Instrumented 6 pipeline stages with `torch.cuda.Event` and NVTX ranges (`src/medtrt/timing.py`), eliminated TensorRT 10.x `enqueueV3` default-stream host synchronization via event-coupled non-default CUDA streams (`src/medtrt/trt_runner.py`), and quantified a `1.13×` laptop GPU clock-state penalty after host idle gaps.
+   Instrumented 6 pipeline stages with `torch.cuda.Event` and NVTX ranges (`src/medtrt/timing.py`), eliminated TensorRT 10.x `enqueueV3` default-stream host synchronization via event-coupled non-default CUDA streams (`src/medtrt/trt_runner.py`), and quantified a `2.34×` laptop GPU clock-state penalty after host idle gaps.
 
 ---
 

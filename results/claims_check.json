@@ -13,7 +13,7 @@
   {
    "check": "benchmark protocol",
    "passed": true,
-   "detail": "13 profiles timed (18-90 passes per profile)"
+   "detail": "13 profiles timed (90-90 passes per profile)"
   },
   {
    "check": "summaries match raw passes",
@@ -23,7 +23,7 @@
   {
    "check": "event timing vs wall clock",
    "passed": true,
-   "detail": "CUDA events vs wall clock: worst median gap 0.26%"
+   "detail": "CUDA events vs wall clock: worst median gap 0.18%"
   },
   {
    "check": "validation.csv freshness",
@@ -38,7 +38,7 @@
   {
    "check": "targets (trt_fp16_optimized)",
    "passed": true,
-   "detail": "every pass < 500 ms (max 122.6); mean Dice >= 0.96 (0.964778); mean |dDice| < 0.005 (0.001669); like-for-like every case |dDice| < 0.005 (max 0.000029)"
+   "detail": "every pass < 500 ms (max 115.3); mean Dice >= 0.96 (0.964778); mean |dDice| < 0.005 (0.001669); like-for-like every case |dDice| < 0.005 (max 0.000029)"
   },
   {
    "check": "README is generated",
@@ -54,6 +54,11 @@
    "check": "no local paths",
    "passed": true,
    "detail": "no local paths in results/"
+  },
+  {
+   "check": "data split & leakage audit",
+   "passed": true,
+   "detail": "9 held-out cases verified across all 13 eval CSVs and 13 bench JSONs (0 training-set overlap)"
   }
  ]
 }

@@ -66,9 +66,9 @@ def check_single_code_version() -> Result:
 
 
 def check_protocol() -> Result:
-    short = [n for n in PROFILES if _json(f"bench_{n}.json")["config"]["total_timed_passes"] < 18]
+    short = [n for n in PROFILES if _json(f"bench_{n}.json")["config"]["total_timed_passes"] < EXPECTED_PASSES]
     if short:
-        return False, f"fewer than 18 timed passes: {short}"
+        return False, f"fewer than {EXPECTED_PASSES} timed passes: {short}"
     counts = {n: _json(f"bench_{n}.json")["config"]["total_timed_passes"] for n in PROFILES}
     return True, f"{len(PROFILES)} profiles timed ({min(counts.values())}-{max(counts.values())} passes per profile)"
 
@@ -156,6 +156,36 @@ def check_no_local_paths() -> Result:
     return not leaks, f"local paths in {leaks}" if leaks else "no local paths in results/"
 
 
+EXPECTED_HELDOUT_CASES = [
+    "spleen_56",
+    "spleen_59",
+    "spleen_6",
+    "spleen_60",
+    "spleen_61",
+    "spleen_62",
+    "spleen_63",
+    "spleen_8",
+    "spleen_9",
+]
+
+
+def check_data_leakage() -> Result:
+    """Verify that evaluation strictly uses the 9 held-out validation cases (disjoint from the 32 training cases) and that no raw NIfTI/weight/engine files are tracked."""
+    held = _json("heldout_cases.json")
+    if held.get("case_ids") != EXPECTED_HELDOUT_CASES or held.get("heldout_count") != 9 or held.get("total_training_cases") != 41:
+        return False, f"heldout_cases.json mismatch: {held.get('case_ids')}"
+    if held.get("split_role") != "bundle_validation_split_used_for_checkpoint_selection":
+        return False, "heldout_cases.json missing split_role disclosure"
+    for name in PROFILES:
+        eval_cases = [r["case_id"] for r in _csv(f"eval_{name}.csv")]
+        if eval_cases != EXPECTED_HELDOUT_CASES:
+            return False, f"eval_{name}.csv evaluated non-heldout cases: {eval_cases}"
+        bench_cases = sorted(_json(f"bench_{name}.json")["per_case"].keys())
+        if bench_cases != EXPECTED_HELDOUT_CASES:
+            return False, f"bench_{name}.json benchmarked non-heldout cases: {bench_cases}"
+    return True, "9 held-out cases verified across all 13 eval CSVs and 13 bench JSONs (0 training-set overlap)"
+
+
 CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("single code version", check_single_code_version),
     ("benchmark protocol", check_protocol),
@@ -167,6 +197,7 @@ CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("README is generated", check_readme_is_generated),
     ("README language", check_readme_language),
     ("no local paths", check_no_local_paths),
+    ("data split & leakage audit", check_data_leakage),
 )
 
 

@@ -8,12 +8,12 @@
 
 | Engineering Subsystem | Baseline Measurement | Optimized Measurement | Measured Improvement | Primary Technical Mechanism |
 | :--- | :---: | :---: | :---: | :---: |
-| **3D UNet Patch Forward (`B=4, 96³`)** | `19.49 ms` (Strict FP32) / `12.68 ms` (TF32) | **`3.01 ms`** (TensorRT 10.16 FP16) | **`6.5×`** vs. FP32 (`4.22×` vs. TF32) | TensorRT 10.16 FP16 Tensor Core tactics, Conv3d+BN+Act fusion, dedicated non-default CUDA stream |
-| **Full-Volume Network Stage (`sw_network`)** | `379.92 ms` (Strict FP32) / `254.60 ms` (TF32) | **`49.02 ms`** (`overlap=0.5`) / **`24.77 ms`** (`overlap=0.25`) | **`7.7×`** same windows / **`15.3×`** Pareto | Dynamic batch profile `[1, 4, 16]`, zero host transfers (`host_copies_count == 0`), sustained boost clock |
+| **3D UNet Patch Forward (`B=4, 96³`)** | `22.36 ms` (Strict FP32) / `15.95 ms` (TF32) | **`3.79 ms`** (TensorRT 10.16 FP16) | **`5.9×`** vs. FP32 (`4.20×` vs. TF32) | TensorRT 10.16 FP16 Tensor Core tactics, Conv3d+BN+Act fusion, dedicated non-default CUDA stream |
+| **Full-Volume Network Stage (`sw_network`)** | `375.62 ms` (Strict FP32) / `260.81 ms` (TF32) | **`49.56 ms`** (`overlap=0.5`) / **`26.21 ms`** (`overlap=0.25`) | **`7.6×`** same windows / **`14.3×`** Pareto | Dynamic batch profile `[1, 4, 16]`, zero host transfers (`host_copies_count == 0`), sustained boost clock |
 | **3D CT Preprocessing (`spleen_6`, `512×512×135`)** | `40.93 ms`, `961 MB` VRAM (MONAI GPU) | **`1.917 ms`**, **`136.0 MB`** VRAM | **`21.4×` faster**, **`7.1×` lower VRAM** | Custom CUDA C++ `fused_preprocess_affine_trilinear_hu_f32` (`cuda/medical_kernels.cu`) with register affine math |
 | **3D Trilinear Inverse Postprocessing (`spleen_6`)** | `118.76 ms`, `2100 MB` VRAM (MONAI GPU) | **`0.951 ms`**, **`41.4 MB`** VRAM | **`124.9×` faster** (`4656×` vs. CPU), **`50.8×` lower VRAM** | Custom CUDA C++ `fused_softmax_2ch_p1_f32` + `fused_invert_trilinear_threshold_u8` (`100.00000%` voxel match) |
 | **FP16 Cross-Backend Numerical Drift** | `+1.6754 cm³` volume bias (`mean |Δlogit| = 0.1377`) | **`+0.0010 cm³`** volume bias (`mean |Δlogit| = 0.00387`) | **`35.6×` lower logit error**, **`620×` lower volume bias** | Analytical FP64 `ConvTranspose3d + BatchNorm3d` weight folding prior to ONNX/TensorRT export |
-| **Complete End-to-End 3D Volume Pipeline** | `3049.8 ms` (Strict FP32) / `2952.0 ms` (Default TF32) | **`96.26 ms`** (`overlap=0.5`) / **`68.88 ms`** (`overlap=0.25`) | **`30.7×`** (`overlap=0.5`) / **`42.9×`** (`overlap=0.25`) | Full-pipeline co-design: Mmap I/O + Custom CUDA C++ Pre/Post + TensorRT 10.16 FP16 + Pareto Windows |
+| **Complete End-to-End 3D Volume Pipeline** | `3122.2 ms` (Strict FP32) / `3341.1 ms` (Default TF32) | **`95.10 ms`** (`overlap=0.5`) / **`60.83 ms`** (`overlap=0.25`) | **`35.1×`** (`overlap=0.5`) / **`54.9×`** (`overlap=0.25`) | Full-pipeline co-design: Mmap I/O + Custom CUDA C++ Pre/Post + TensorRT 10.16 FP16 + Pareto Windows |
 
 ![Backend Latency and Speedup](docs/figures/backend_latency_speedup.png)
 

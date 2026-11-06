@@ -44,19 +44,21 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from medtrt.bench import run_single_timed_volume_pass
+from medtrt.config import code_fingerprint
 from medtrt.data import HELDOUT_JSON_PATH
 from medtrt.evaluate import (
     compute_all_segmentation_metrics,
     compute_volume_cm3,
 )
 from medtrt.infer import build_pipeline, infer_volume
-from medtrt.profiles import PROFILES, REFERENCE, SHIPPING, build_predictor, get_profile
+from medtrt.profiles import PROFILES, REFERENCE, SHIPPING, apply_precision, build_predictor, get_profile
 
 GPU_LOCK = MEDTRT_ROOT / "results" / ".gpu_busy"
 
 
-@st.cache_resource(show_spinner="Initializing GPU Predictor for Selected Profile...")
-def get_cached_predictor(profile_name: str) -> Tuple[Any, bool, float]:
+@st.cache_resource(show_spinner="Initializing GPU Predictor for Selected Profile...", max_entries=len(PROFILES))
+def get_cached_predictor(profile_name: str, code_version: str) -> Tuple[Any, bool, float]:
+    """`code_version` only keys the cache, so a predictor cannot outlive an edit to the code that built it."""
     device = torch.device("cuda:0")
     profile = get_profile(profile_name)
     return build_predictor(profile, device)
@@ -164,7 +166,8 @@ def execute_profile_on_volume(
 ) -> Dict[str, Any]:
     device = torch.device("cuda:0")
     profile = get_profile(profile_name)
-    predictor, use_amp, extra_vram = get_cached_predictor(profile_name)
+    predictor, use_amp, extra_vram = get_cached_predictor(profile_name, code_fingerprint())
+    apply_precision(profile)  # flags are process-wide, and a cache hit skips the call in `build_predictor`
     pipeline = build_pipeline(profile)
 
     timings = run_single_timed_volume_pass(
@@ -508,4 +511,5 @@ def main() -> None:
             show_plane(rgb, title, ch_x, ch_y, aspect_ratio, renderer.startswith("Interactive"), f"plane_{title[:3]}")
 
 
-main()
+if __name__ == "__main__":
+    main()

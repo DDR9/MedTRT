@@ -3,6 +3,8 @@
   "total_training_cases": 41,
   "heldout_count": 9,
   "split_rule": "alphanumeric_final_9_and_bundle_train_json",
+  "split_role": "bundle_validation_split_used_for_checkpoint_selection",
+  "bundle_version": "0.6.1",
   "bundle_validate_expr": "$[{'image': i, 'label': l} for i, l in zip(@images[-9:], @labels[-9:])]",
   "bundle_reference_mean_dice": 0.961,
   "case_ids": [

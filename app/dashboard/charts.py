@@ -275,3 +275,30 @@ def relation(frame: pd.DataFrame, x: str, y: str = "Dice") -> go.Figure:
     for row in (frame.loc[frame[y].idxmin()], frame.loc[frame[y].idxmax()]):
         fig.add_annotation(x=row[x], y=row[y], text=str(row["Case"]), showarrow=False, yshift=14, font=dict(color=t.ink2, size=12))
     return _finish(fig, t, height=320, x_title=x, y_title=y)
+
+
+def scaling_lines(frame: pd.DataFrame) -> go.Figure:
+    """Plot custom CUDA C++ kernel speedups over PyTorch CUDA across volume sizes."""
+    t = theme()
+    fig = go.Figure()
+    series_cols = [
+        ("Fused Post Speedup", "Fused Postprocessing (Softmax + Trilinear Invert + Count)"),
+        ("Trilinear Resample Speedup", "3D Trilinear Resampling"),
+        ("Nearest u8 Speedup", "3D Nearest-Neighbor Label Resampling"),
+        ("HU Vec4 Speedup", "HU Windowing + Normalization (float4)"),
+    ]
+    for idx, (col, label_text) in enumerate(series_cols):
+        if col not in frame.columns:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=frame["Volume Shape"],
+                y=frame[col],
+                name=label_text,
+                mode="lines+markers",
+                line=dict(color=t.series[idx % len(t.series)], width=2),
+                marker=dict(size=9, color=t.series[idx % len(t.series)], line=dict(color=t.surface, width=2)),
+                hovertemplate=label_text + "<br>Shape %{x}: %{y:,.2f}x speedup<extra></extra>",
+            )
+        )
+    return _finish(fig, t, height=380, legend=True, x_title="3D Volume Shape (voxels)", y_title="Speedup over PyTorch GPU (x)", top=64)

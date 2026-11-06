@@ -30,8 +30,9 @@ jobs:
         run: |
           python -m py_compile src/medtrt/*.py app/viewer.py benchmarks/*.py tests/*.py
 
-      - name: Run CPU-compatible unit tests (volumetry & segmentation metrics)
+      - name: Run CPU-compatible unit tests & published claims / leakage verification
         env:
           PYTHONPATH: src
         run: |
-          pytest tests/test_volume_math.py -v
+          python -m medtrt.verify_claims
+          pytest tests/test_volume_math.py tests/test_published_results.py tests/test_dashboard.py -v

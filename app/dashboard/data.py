@@ -65,6 +65,14 @@ class Results:
     state: Dict[str, Any] = field(default_factory=dict)
     claims_check: Dict[str, Any] = field(default_factory=dict)
     sweep: pd.DataFrame = field(default_factory=pd.DataFrame)
+    bench_preproc: Dict[str, Any] = field(default_factory=dict)
+    bench_postproc: Dict[str, Any] = field(default_factory=dict)
+    bench_scaling: Dict[str, Any] = field(default_factory=dict)
+    bench_memory: Dict[str, Any] = field(default_factory=dict)
+    bench_correctness: Dict[str, Any] = field(default_factory=dict)
+    bench_e2e: Dict[str, Any] = field(default_factory=dict)
+    bench_trt_variants: Dict[str, Any] = field(default_factory=dict)
+    bench_pt_patches: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -132,6 +140,14 @@ def load() -> Results:
     res.state = _read_json(RESULTS_DIR / "STATE.json")
     res.claims_check = _read_json(RESULTS_DIR / "claims_check.json")
     res.sweep = _read_csv(RESULTS_DIR / "sweep.csv")
+    res.bench_preproc = _read_json(RESULTS_DIR / "benchmark_preprocessing.json")
+    res.bench_postproc = _read_json(RESULTS_DIR / "benchmark_postprocessing.json")
+    res.bench_scaling = _read_json(RESULTS_DIR / "benchmark_scaling.json")
+    res.bench_memory = _read_json(RESULTS_DIR / "benchmark_memory.json")
+    res.bench_correctness = _read_json(RESULTS_DIR / "benchmark_correctness.json")
+    res.bench_e2e = _read_json(RESULTS_DIR / "benchmark_end_to_end.json")
+    res.bench_trt_variants = _read_json(RESULTS_DIR / "benchmark_tensorrt_variants.json")
+    res.bench_pt_patches = _read_json(RESULTS_DIR / "benchmark_pytorch_patches.json")
     return res
 
 
@@ -693,11 +709,260 @@ def claims_frame(res: Results, roles: Roles) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def live_sync_info(res: Results) -> Dict[str, Any]:
+    """Return live filesystem synchronization telemetry for the sidebar watcher."""
+    gpu_busy = GPU_LOCK.exists()
+    busy_text = ""
+    if gpu_busy:
+        try:
+            busy_text = GPU_LOCK.read_text(encoding="utf-8").strip()
+        except OSError:
+            busy_text = "GPU job active"
+
+    newest_file = "none"
+    newest_mtime = 0
+    file_count = 0
+    if RESULTS_DIR.exists():
+        for p in RESULTS_DIR.iterdir():
+            if p.is_file() and p.suffix in (".json", ".csv"):
+                file_count += 1
+                try:
+                    st_m = int(p.stat().st_mtime)
+                    if st_m >= newest_mtime:
+                        newest_mtime = st_m
+                        newest_file = p.name
+                except OSError:
+                    continue
+
+    return {
+        "gpu_busy": gpu_busy,
+        "busy_text": busy_text,
+        "newest_file": newest_file,
+        "newest_mtime": newest_mtime,
+        "result_files_count": file_count,
+        "bench_profiles_count": len(res.bench),
+        "eval_profiles_count": len(res.evals),
+    }
+
+
+def cuda_kernels_frame(res: Results) -> pd.DataFrame:
+    """Hardware compilation & SM occupancy attributes of the 9 custom CUDA C++17 kernels."""
+    block = res.bench_correctness.get("cuda_hardware_kernels", {})
+    kernels = block.get("kernels", {})
+    rows: List[Dict[str, Any]] = []
+    for k_name, info in kernels.items():
+        rows.append(
+            {
+                "CUDA C++17 Kernel": k_name,
+                "Registers/thread": info.get("num_registers_per_thread"),
+                "Shared mem (B)": info.get("static_shared_mem_bytes"),
+                "Local spills (B)": info.get("local_mem_bytes_per_thread"),
+                "Max threads/block": info.get("max_threads_per_block"),
+                "Active blocks/SM": info.get("active_blocks_per_sm_at_256t"),
+                "Active warps/SM": info.get("active_warps_per_sm_at_256t"),
+                "Occupancy (%)": info.get("theoretical_occupancy_pct"),
+                "SASS arch": f"sm_{info.get('sass_binary_version')}" if info.get("sass_binary_version") else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def preproc_methods_frame(res: Results) -> pd.DataFrame:
+    """Compare CPU MONAI, GPU MONAI grid_sample, and Custom CUDA C++ fused 3D preprocessing."""
+    fp = res.bench_preproc.get("full_preprocess", {})
+    if not fp:
+        return pd.DataFrame()
+    cpu_med = fp.get("monai_cpu_ms", {}).get("median")
+    gpu_med = fp.get("monai_gpu", {}).get("cuda_event_ms", {}).get("median")
+    cuda_med = fp.get("custom_cuda_fused", {}).get("cuda_event_ms", {}).get("median")
+    rows = [
+        {
+            "Method": "MONAI CPU (Orientationd + Spacingd + ScaleIntensity)",
+            "Median (ms)": cpu_med,
+            "IQR (ms)": fp.get("monai_cpu_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": 0.0,
+            "Peak VRAM (MB)": 0.0,
+            "Speedup vs CPU": 1.0 if cpu_med else None,
+            "Speedup vs MONAI GPU": ratio(gpu_med, cpu_med),
+        },
+        {
+            "Method": "MONAI GPU grid_sample (3D Meshgrid on cuda:0)",
+            "Median (ms)": gpu_med,
+            "IQR (ms)": fp.get("monai_gpu", {}).get("cuda_event_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": fp.get("monai_gpu", {}).get("incremental_allocated_vram_mb"),
+            "Peak VRAM (MB)": fp.get("monai_gpu", {}).get("peak_allocated_vram_mb"),
+            "Speedup vs CPU": ratio(cpu_med, gpu_med),
+            "Speedup vs MONAI GPU": 1.0 if gpu_med else None,
+        },
+        {
+            "Method": "Custom CUDA C++ Fused Kernel (fused_preprocess_affine_trilinear_hu_f32)",
+            "Median (ms)": cuda_med,
+            "IQR (ms)": fp.get("custom_cuda_fused", {}).get("cuda_event_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": fp.get("custom_cuda_fused", {}).get("incremental_allocated_vram_mb"),
+            "Peak VRAM (MB)": fp.get("custom_cuda_fused", {}).get("peak_allocated_vram_mb"),
+            "Speedup vs CPU": ratio(cpu_med, cuda_med),
+            "Speedup vs MONAI GPU": ratio(gpu_med, cuda_med),
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def postproc_methods_frame(res: Results) -> pd.DataFrame:
+    """Compare CPU MONAI Invertd, GPU MONAI Invertd, and Custom CUDA C++ fused trilinear postprocessing."""
+    methods = res.bench_postproc.get("methods", {})
+    if not methods:
+        return pd.DataFrame()
+    cpu_m = methods.get("monai_cpu_trilinear", {})
+    gpu_tri = methods.get("monai_gpu_trilinear", {})
+    gpu_nn = methods.get("monai_gpu_nearest_u8", {})
+    cuda_tri = methods.get("custom_cuda_fused_trilinear", {})
+
+    cpu_med = cpu_m.get("latency_ms", {}).get("median")
+    gpu_med = gpu_tri.get("cuda_event_ms", {}).get("median")
+    nn_med = gpu_nn.get("cuda_event_ms", {}).get("median")
+    cuda_med = cuda_tri.get("cuda_event_ms", {}).get("median")
+
+    rows = [
+        {
+            "Postprocessing Method": "MONAI CPU Trilinear Invertd",
+            "Median (ms)": cpu_med,
+            "IQR (ms)": cpu_m.get("latency_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": 0.0,
+            "Peak VRAM (MB)": 0.0,
+            "Case Dice": cpu_m.get("dice"),
+            "Voxel Agreement (%)": cpu_m.get("voxel_agreement_vs_monai_gpu_pct"),
+            "Speedup vs CPU": 1.0 if cpu_med else None,
+            "Speedup vs MONAI GPU": ratio(gpu_med, cpu_med),
+        },
+        {
+            "Postprocessing Method": "MONAI GPU Trilinear Invertd (2-Ch Meshgrid)",
+            "Median (ms)": gpu_med,
+            "IQR (ms)": gpu_tri.get("cuda_event_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": gpu_tri.get("incremental_allocated_vram_mb"),
+            "Peak VRAM (MB)": gpu_tri.get("peak_allocated_vram_mb"),
+            "Case Dice": gpu_tri.get("dice"),
+            "Voxel Agreement (%)": gpu_tri.get("voxel_agreement_vs_monai_gpu_pct"),
+            "Speedup vs CPU": ratio(cpu_med, gpu_med),
+            "Speedup vs MONAI GPU": 1.0 if gpu_med else None,
+        },
+        {
+            "Postprocessing Method": "MONAI GPU Nearest-Neighbor Label Invertd (uint8)",
+            "Median (ms)": nn_med,
+            "IQR (ms)": gpu_nn.get("cuda_event_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": gpu_nn.get("incremental_allocated_vram_mb"),
+            "Peak VRAM (MB)": gpu_nn.get("peak_allocated_vram_mb"),
+            "Case Dice": gpu_nn.get("dice"),
+            "Voxel Agreement (%)": gpu_nn.get("voxel_agreement_vs_monai_gpu_pct"),
+            "Speedup vs CPU": ratio(cpu_med, nn_med),
+            "Speedup vs MONAI GPU": ratio(gpu_med, nn_med),
+        },
+        {
+            "Postprocessing Method": "Custom CUDA C++ Fused Softmax + Trilinear Invert + Ballot Count",
+            "Median (ms)": cuda_med,
+            "IQR (ms)": cuda_tri.get("cuda_event_ms", {}).get("iqr"),
+            "Incremental VRAM (MB)": cuda_tri.get("incremental_allocated_vram_mb"),
+            "Peak VRAM (MB)": cuda_tri.get("peak_allocated_vram_mb"),
+            "Case Dice": cuda_tri.get("dice"),
+            "Voxel Agreement (%)": cuda_tri.get("voxel_agreement_vs_monai_gpu_pct"),
+            "Speedup vs CPU": ratio(cpu_med, cuda_med),
+            "Speedup vs MONAI GPU": ratio(gpu_med, cuda_med),
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def scaling_frame(res: Results) -> pd.DataFrame:
+    """Volume size scaling across custom CUDA C++ kernels vs. PyTorch CUDA."""
+    items = res.bench_scaling.get("volume_scaling", [])
+    rows: List[Dict[str, Any]] = []
+    for item in items:
+        sh = item.get("shape", [])
+        shape_str = "x".join(str(x) for x in sh)
+        rows.append(
+            {
+                "Volume Shape": shape_str,
+                "Voxels (M)": item.get("voxels_millions"),
+                "PyTorch Fused Post (ms)": item.get("fused_post_pytorch_ms"),
+                "Custom CUDA Fused Post (ms)": item.get("fused_post_cuda_ms"),
+                "Fused Post Speedup": item.get("fused_post_speedup"),
+                "Trilinear Resample Speedup": item.get("trilinear_speedup"),
+                "Nearest u8 Speedup": item.get("nearest_u8_speedup"),
+                "HU Vec4 Speedup": item.get("hu_norm_speedup"),
+                "PyTorch Post VRAM (MB)": item.get("fused_post_pytorch_vram_mb"),
+                "Custom CUDA Post VRAM (MB)": item.get("fused_post_cuda_vram_mb"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def memory_frames(res: Results) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Return `(static_footprint_df, dynamic_pipeline_vram_df)` from `benchmark_memory.json`."""
+    static = res.bench_memory.get("static_model_footprint_mb", {})
+    s_rows: List[Dict[str, Any]] = []
+    if static:
+        s_rows = [
+            {"Artifact": "PyTorch FP32 Model Weights", "Footprint (MB)": static.get("pytorch_fp32_weights_mb")},
+            {"Artifact": "PyTorch FP16 Model Weights", "Footprint (MB)": static.get("pytorch_fp16_weights_mb")},
+            {"Artifact": "TensorRT 10.x FP32 Serialized Engine", "Footprint (MB)": static.get("trt_fp32", {}).get("total_static_mb")},
+            {"Artifact": "TensorRT 10.x FP16 Serialized Engine", "Footprint (MB)": static.get("trt_fp16", {}).get("total_static_mb")},
+        ]
+    dyn = res.bench_memory.get("pipeline_peak_memory", {})
+    d_rows: List[Dict[str, Any]] = []
+    for prof_name, info in dyn.items():
+        d_rows.append(
+            {
+                "Profile": prof_name,
+                "Median Allocated VRAM (MB)": info.get("median_allocated_mb"),
+                "Max Allocated VRAM (MB)": info.get("max_allocated_mb"),
+                "Max Reserved VRAM (MB)": info.get("max_reserved_mb"),
+                "Share of GPU VRAM (%)": info.get("vram_utilization_pct_of_16gb"),
+            }
+        )
+    return pd.DataFrame(s_rows), pd.DataFrame(d_rows)
+
+
+def precision_numerics_frame(res: Results) -> pd.DataFrame:
+    """Compare logit drift and channel bias before vs. after analytical FP64 ConvTranspose3d+BN folding."""
+    comp = res.bench_correctness.get("backend_precision_comparison", {})
+    rows: List[Dict[str, Any]] = []
+    for key, info in comp.items():
+        rows.append(
+            {
+                "Backend Variant": key,
+                "Real Patch Mean |Δlogit|": info.get("real_patch_mean_abs_diff"),
+                "Real Patch Max |Δlogit|": info.get("real_patch_max_abs_diff"),
+                "Ch0 Signed Bias": info.get("real_patch_ch0_signed_bias"),
+                "Ch1 Signed Bias": info.get("real_patch_ch1_signed_bias"),
+                "Voxel Argmax Agreement (%)": info.get("real_patch_argmax_agreement_pct"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def other_result_files(res: Results) -> List[Path]:
     """Result files no page reads yet, so new outputs are still visible and downloadable."""
-    known = {"env.json", "trt_build.json", "bland_altman.json", "failure_analysis.json", "timeline_summary.json",
-             "ablation.json", "probes.json", "heldout_cases.json", "STATE.json", "claims_check.json", "sweep.csv",
-             "validation.csv"}  # fmt: skip
+    known = {
+        "env.json",
+        "trt_build.json",
+        "bland_altman.json",
+        "failure_analysis.json",
+        "timeline_summary.json",
+        "ablation.json",
+        "probes.json",
+        "heldout_cases.json",
+        "STATE.json",
+        "claims_check.json",
+        "sweep.csv",
+        "validation.csv",
+        "benchmark_preprocessing.json",
+        "benchmark_postprocessing.json",
+        "benchmark_scaling.json",
+        "benchmark_memory.json",
+        "benchmark_correctness.json",
+        "benchmark_end_to_end.json",
+        "benchmark_tensorrt_variants.json",
+        "benchmark_pytorch_patches.json",
+    }
     if not RESULTS_DIR.exists():
         return []
     return [

@@ -15,7 +15,7 @@
 | **Cross-Backend Dice Drift (`Mean |ΔDice|` / `Max`)** | Reference (`0.0`) | **`0.000014` / `0.000029`** (`0/9 >= 0.005`) | `0.001669` / `0.005563` (`1/9 >= 0.005`) | **PASS** (`< 0.005` like-for-like) |
 | **Cross-Backend Volume Bias vs. FP32 (`95% LoA`)** | Reference (`0.0 cm³`) | **`+0.0010 ± 0.0194 cm³`** (`[-0.037, +0.039] cm³`) | `+0.1196 ± 1.1815 cm³` (`[-2.20, +2.44] cm³`) | **PASS** (`p = 0.885`, unbiased) |
 | **Anatomical Volume Error vs. GT (`MAE` / `Vol Sim`)** | `5.17 cm³` (`1.88%`) / `0.9905` | `5.17 cm³` (`1.88%`) / `0.9905` | `5.11 cm³` (`1.84%`) / `0.9907` | **Quantified** |
-| **End-to-End Inference Latency (Median / Max)** | `3049.8 ms` / `6562.4 ms` | **`96.26 ms`** / **`232.64 ms`** | **`68.88 ms`** / **`122.59 ms`** | **PASS** (`< 500 ms` all passes) |
+| **End-to-End Inference Latency (Median / Max)** | `3122.2 ms` / `7759.5 ms` | **`95.10 ms`** / **`240.71 ms`** | **`60.83 ms`** / **`115.30 ms`** | **PASS** (`< 500 ms` all passes) |
 
 ---
 
