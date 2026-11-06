@@ -21,7 +21,7 @@ In the initial baseline repository, TensorRT FP16 exhibited a statistically sign
 3. **Mathematical Fix — Pre-Export FP64 `ConvTranspose3d + BatchNorm3d` Folding (`fold_conv_transpose_batchnorm`):**
    We implemented exact analytical folding in **IEEE-754 FP64 (`torch.float64`)** prior to FP32/ONNX conversion (`src/medtrt/model.py`):
    $$W_{\text{folded}} = W \cdot \frac{\gamma}{\sqrt{\sigma^2 + \epsilon}}, \qquad b_{\text{folded}} = (b - \mu) \cdot \frac{\gamma}{\sqrt{\sigma^2 + \epsilon}} + \beta$$
-   - In FP32, this fold is algebraically exact (`max_abs_logit_diff = 1.34e-05`).
+   - In FP32, this fold is algebraically exact (`max_abs_logit_diff = 1.43e-05`).
    - In TensorRT FP16, eliminating the large intermediate `ConvTranspose3d` offset reduces mean absolute logit error by **`35.6×`** (`0.1377 -> 0.00387`), reduces signed channel bias by **`62.3×`** (`-0.159 -> -0.00255`), and collapses full-volume cross-backend volume bias by **`620×`** (`+1.6754 cm³ -> +0.0027 cm³`, `p = 0.722`, 5/9 cases positive — statistically indistinguishable from zero!).
 
 | TensorRT FP16 Engine Variant | Held-Out Mean Dice | Mean `|ΔDice|` vs. Strict FP32 | Cross-Backend Volume Bias vs. Strict FP32 | Cases Larger Than FP32 | Paired t-test p-value |
@@ -52,12 +52,12 @@ Both `spleen_unet_fp32.engine` (`22.97 MB`) and `spleen_unet_fp16.engine` (`13.7
 
 | Backend & Precision Mode | Batch B=1 Median (ms) | Batch B=4 Median (ms) | Batch B=8 Median (ms) | B=4 Throughput (patches/s) | Speedup vs. PyTorch Strict FP32 (B=4) | Speedup vs. PyTorch Default TF32 (B=4) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| PyTorch Strict IEEE FP32 (`allow_tf32=False`) | `6.96` | `22.36` | `41.60` | `178.9` | `1.00×` | `0.71×` |
-| PyTorch Default TF32 (`allow_tf32=True`) | `3.90` | `15.95` | `25.25` | `250.8` | `1.40×` | `1.00×` |
-| PyTorch AMP FP16 (`torch.autocast`) | `5.40` | `15.69` | `23.10` | `254.9` | `1.42×` | `1.02×` |
-| PyTorch Pure FP16 (`model.half()`) | `4.48` | `14.89` | `22.08` | `268.6` | `1.50×` | `1.07×` |
-| TensorRT 10.16 FP32 (`spleen_unet_fp32.engine`) | `3.24` | `13.36` | `29.58` | `299.3` | `1.67×` | `1.19×` |
-| **TensorRT 10.16 FP16 (`spleen_unet_fp16.engine`)** | **`1.08`** | **`3.79`** | **`8.89`** | **`1054.3`** | **`5.89×`** | **`4.20×`** |
+| PyTorch Strict IEEE FP32 (`allow_tf32=False`) | `6.68` | `19.49` | `39.15` | `205.2` | `1.00×` | `0.65×` |
+| PyTorch Default TF32 (`allow_tf32=True`) | `3.77` | `12.68` | `24.20` | `315.6` | `1.54×` | `1.00×` |
+| PyTorch AMP FP16 (`torch.autocast`) | `5.72` | `14.50` | `23.08` | `275.8` | `1.34×` | `0.87×` |
+| PyTorch Pure FP16 (`model.half()`) | `4.86` | `11.13` | `19.54` | `359.5` | `1.75×` | `1.14×` |
+| TensorRT 10.16 FP32 (`spleen_unet_fp32.engine`) | `3.12` | `11.78` | `23.79` | `339.5` | `1.65×` | `1.08×` |
+| **TensorRT 10.16 FP16 (`spleen_unet_fp16.engine`)** | **`0.88`** | **`3.01`** | **`6.91`** | **`1330.4`** | **`6.48×`** | **`4.22×`** |
 
 ---
 

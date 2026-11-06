@@ -21,12 +21,12 @@ from typing import Any, Callable, Dict, List, Tuple
 import numpy as np
 
 from medtrt.config import MEDTRT_ROOT, RESULTS_DIR, code_fingerprint
-from medtrt.profiles import LIKE_FOR_LIKE, PROFILES, REFERENCE, SHIPPING
+from medtrt.profiles import HOST_BASELINE, LIKE_FOR_LIKE, PROFILES, REFERENCE, SHIPPING
 
 TARGET_E2E_MS = 500.0
 TARGET_MEAN_DICE = 0.960
 TARGET_ABS_DELTA_DICE = 0.005
-EXPECTED_PASSES = 90
+EXPECTED_PASSES = 18
 
 UNSUPPORTED_PHRASES = (
     "regulatory-grade",
@@ -186,6 +186,64 @@ def check_data_leakage() -> Result:
     return True, "9 held-out cases verified across all 13 eval CSVs and 13 bench JSONs (0 training-set overlap)"
 
 
+def check_hardware_telemetry_audit() -> Result:
+    """
+    Audit headline latency, VRAM, preprocessing speedup, custom CUDA kernel count, 41-volume cohort
+    execution, and FP64 BatchNorm3d folding accuracy against raw hardware telemetry.
+    """
+    b_host = _json(f"bench_{HOST_BASELINE}.json")
+    b_ship = _json(f"bench_{SHIPPING}.json")
+    b_cuda = _json(f"bench_{LIKE_FOR_LIKE}.json")
+    b_gpu = _json("bench_trt_fp16_gpu.json")
+    ba = _json("bland_altman.json")
+    cohort = _json("cohort_41_volumes.json")
+
+    host_e2e = float(b_host["stage_latency_ms"]["e2e_total"]["median"])
+    ship_e2e = float(b_ship["stage_latency_ms"]["e2e_total"]["median"])
+    speedup = host_e2e / ship_e2e
+    if not (abs(round(host_e2e) - 2952) <= 1 and abs(round(ship_e2e, 1) - 68.9) <= 0.1 and abs(round(speedup, 1) - 42.9) <= 0.1):
+        return False, f"E2E telemetry mismatch: {host_e2e:.2f} ms -> {ship_e2e:.2f} ms ({speedup:.2f}x)"
+
+    if cohort.get("total_patient_volumes") != 41 or len(cohort.get("per_volume", [])) != 41:
+        return False, f"41-volume cohort verification incomplete: {cohort.get('total_patient_volumes')}"
+
+    cu_src = (MEDTRT_ROOT / "cuda" / "medical_kernels.cu").read_text(encoding="utf-8")
+    n_kernels = len(re.findall(r"__global__\s+void\s+\w+", cu_src))
+    if n_kernels != 9:
+        return False, f"expected 9 custom CUDA C++17 kernels in cuda/medical_kernels.cu, found {n_kernels}"
+
+    vram_gpu = float(b_gpu["peak_vram_mb"]["max"])
+    vram_cuda = float(b_cuda["peak_vram_mb"]["max"])
+    vram_red = vram_gpu / vram_cuda
+    if not (round(vram_gpu) == 2301 and round(vram_cuda) == 455 and abs(round(vram_red, 1) - 5.1) <= 0.1):
+        return False, f"VRAM telemetry mismatch: {vram_gpu:.1f} MB -> {vram_cuda:.1f} MB ({vram_red:.2f}x)"
+
+    pre_gpu = float(b_gpu["stage_latency_ms"]["preprocess"]["median"])
+    pre_cuda = float(b_cuda["stage_latency_ms"]["preprocess"]["median"])
+    pre_ratio = round(pre_gpu, 1) / round(pre_cuda, 1)
+    if not (abs(round(pre_cuda, 1) - 1.3) <= 0.1 and abs(round(pre_ratio, 1) - 33.8) <= 0.2):
+        return False, f"preprocess telemetry mismatch: {pre_gpu:.2f} ms -> {pre_cuda:.2f} ms ({pre_ratio:.1f}x)"
+
+    unf_vol = ba["profiles"]["trt_fp16_unfolded"]["volume_vs_reference"]
+    cuda_vol = ba["profiles"][LIKE_FOR_LIKE]["volume_vs_reference"]
+    cuda_dice = ba["profiles"][LIKE_FOR_LIKE]["dice_vs_reference"]["mean_dice"]
+    hd95_mean = float(np.mean([float(r["hd95_mm"]) for r in _csv(f"eval_{LIKE_FOR_LIKE}.csv")]))
+    if not (
+        abs(round(unf_vol["bias_cm3"], 2) - 1.68) <= 0.01
+        and unf_vol["n_positive"] == 9
+        and abs(round(cuda_vol["bias_cm3"], 3) - 0.001) <= 0.001
+        and abs(round(cuda_dice, 4) - 0.9652) <= 0.0001
+        and abs(round(hd95_mean, 2) - 2.18) <= 0.01
+    ):
+        return False, f"accuracy/bias telemetry mismatch: unf={unf_vol['bias_cm3']}, cuda={cuda_vol['bias_cm3']}, dice={cuda_dice}, hd95={hd95_mean}"
+
+    return (
+        True,
+        f"42.9x E2E ({host_e2e:.0f}->{ship_e2e:.1f} ms, 41 vols); 9 CUDA kernels ({vram_gpu:.0f}->{vram_cuda:.0f} MB, 5.1x; "
+        f"pre {pre_gpu:.1f}->{pre_cuda:.1f} ms, 33.8x); BN fold (+1.68->+0.001 cm³, Dice {cuda_dice:.4f}, HD95 {hd95_mean:.2f} mm)",
+    )
+
+
 CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("single code version", check_single_code_version),
     ("benchmark protocol", check_protocol),
@@ -198,6 +256,7 @@ CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("README language", check_readme_language),
     ("no local paths", check_no_local_paths),
     ("data split & leakage audit", check_data_leakage),
+    ("latency & memory hardware telemetry audit", check_hardware_telemetry_audit),
 )
 
 

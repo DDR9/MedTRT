@@ -72,13 +72,15 @@ medtrt/
 │   ├── benchmark_end_to_end.py        # 7-rung controlled end-to-end pipeline ablation study
 │   ├── benchmark_memory.py            # Static & dynamic VRAM allocation analysis
 │   ├── benchmark_scaling.py           # Volume size scaling (4.2M to 50.3M voxels) across custom CUDA kernels
-│   └── benchmark_correctness.py       # Numerical equivalence & edge-case verification
+│   ├── benchmark_correctness.py       # Numerical equivalence & edge-case verification
+│   └── benchmark_cohort_41.py         # Full 41-patient-volume GPU execution & telemetry verification
 ├── analysis/
 │   └── generate_reports.py            # Master report & 12-plot generator from measured results/
 ├── app/
-│   └── viewer.py                      # Synchronized tri-planar Streamlit workstation with diff-mask overlay
-├── tests/                             # 40 automated unit, CUDA kernel, integration, failure & claim tests
+│   ├── viewer.py                      # Streamlit multi-page dashboard entry point
+│   └── workstation.py                 # Synchronized tri-planar workstation with real-time FP32-vs-FP16 diff heatmaps
+├── tests/                             # 65-test automated verification suite auditing latency & memory telemetry
 ├── configs/default.yaml               # Declarative pipeline & TensorRT builder configuration
 ├── reports/                           # Detailed Phase 3-7 technical reports
-└── docs/                              # Engineering audit, resume evidence, and 12 generated figures
+└── docs/                              # Engineering audit, technical paper, resume evidence, and 12 generated figures
 ```

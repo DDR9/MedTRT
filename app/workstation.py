@@ -36,7 +36,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 import torch
-from scipy.ndimage import binary_erosion
+from scipy.ndimage import binary_erosion, distance_transform_edt
 
 MEDTRT_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = MEDTRT_ROOT / "src"
@@ -107,6 +107,33 @@ def extract_1px_contour(mask_2d: np.ndarray) -> np.ndarray:
     return b & (~eroded)
 
 
+def compute_fp32_vs_fp16_heatmap_2d(pred_2d: np.ndarray, ref_2d: np.ndarray) -> np.ndarray:
+    """
+    Compute a normalized [0, 1] real-time FP32-vs-FP16 difference heatmap combining exact voxel
+    disagreement |Pred - Ref| with continuous signed-boundary-distance probability divergence.
+    """
+    p_bin = (pred_2d > 0).astype(bool)
+    r_bin = (ref_2d > 0).astype(bool)
+    if not np.any(p_bin) and not np.any(r_bin):
+        return np.zeros(pred_2d.shape, dtype=np.float32)
+
+    def _soft_prob(mask_b: np.ndarray) -> np.ndarray:
+        if not np.any(mask_b):
+            return np.zeros(mask_b.shape, dtype=np.float32)
+        if np.all(mask_b):
+            return np.ones(mask_b.shape, dtype=np.float32)
+        sdf = distance_transform_edt(mask_b) - distance_transform_edt(~mask_b)
+        return (1.0 / (1.0 + np.exp(-np.clip(sdf / 1.5, -12.0, 12.0)))).astype(np.float32)
+
+    prob_diff = np.abs(_soft_prob(p_bin) - _soft_prob(r_bin))
+    hard_diff = (p_bin ^ r_bin).astype(np.float32)
+    heat = np.maximum(prob_diff, hard_diff)
+    max_val = float(heat.max())
+    if max_val > 1e-6:
+        heat = np.clip(heat / max(max_val, 0.25), 0.0, 1.0)
+    return heat.astype(np.float32)
+
+
 def render_plane_rgb(
     ct_2d: np.ndarray,
     pred_2d: Optional[np.ndarray],
@@ -134,6 +161,15 @@ def render_plane_rgb(
             if gt_2d is not None:
                 gt_c = extract_1px_contour(np.rot90(gt_2d))
                 rgb[gt_c & pr_c] = [255.0, 220.0, 0.0]  # Yellow exact overlap
+        elif mask_mode == "FP32-vs-FP16 Difference Heatmap":
+            ref_rot = np.rot90(cmp_2d > 0) if cmp_2d is not None else (np.rot90(gt_2d > 0) if gt_2d is not None else None)
+            if ref_rot is not None:
+                heat = compute_fp32_vs_fp16_heatmap_2d(pr_rot, ref_rot)
+                active = heat > 0.02
+                if np.any(active):
+                    cmap_rgb = plt.cm.inferno(heat)[..., :3].astype(np.float32) * 255.0
+                    w_map = np.clip(heat[..., None] * max(alpha, 0.55), 0.15, 0.92)
+                    rgb[active] = (1.0 - w_map[active]) * rgb[active] + w_map[active] * cmap_rgb[active]
         elif mask_mode == "Difference / Disagreement Mask":
             ref_rot = np.rot90(cmp_2d > 0) if cmp_2d is not None else (np.rot90(gt_2d > 0) if gt_2d is not None else None)
             if ref_rot is not None:
@@ -323,11 +359,14 @@ def main() -> None:
             options=[
                 "Translucent Overlay",
                 "1-Pixel Boundary Contour",
+                "FP32-vs-FP16 Difference Heatmap",
                 "Difference / Disagreement Mask",
                 "Hidden",
             ],
             index=1,
         )
+        if mask_mode == "FP32-vs-FP16 Difference Heatmap" and not enable_comparison:
+            compare_backend = REFERENCE
         overlay_alpha = st.slider("Overlay Opacity", 0.1, 0.9, 0.45, 0.05)
         renderer = st.radio("Slice Renderer", options=["Fast", "Interactive (zoom and pan)"], index=0)
 
@@ -367,7 +406,7 @@ def main() -> None:
             gt_vol=gt_vol,
         )
         cmp_tel = None
-        if enable_comparison and compare_backend:
+        if (enable_comparison or mask_mode == "FP32-vs-FP16 Difference Heatmap") and compare_backend:
             cmp_tel = execute_profile_on_volume(
                 img_path=selected_img_path,
                 profile_name=compare_backend,

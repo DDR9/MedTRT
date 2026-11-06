@@ -154,9 +154,9 @@ def test_every_page_renders_with_data(page: str, results: Path) -> None:
     assert not app.exception, app.exception
 
 
-@pytest.mark.parametrize("page", PAGES)
-def test_every_page_renders_with_no_results(page: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_every_page_renders_with_no_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(data, "RESULTS_DIR", tmp_path / "does_not_exist")
     monkeypatch.setattr(data, "GPU_LOCK", tmp_path / ".gpu_busy")
-    app = AppTest.from_string(_page_script(page), default_timeout=30).run()
-    assert not app.exception, app.exception
+    for page in PAGES:
+        app = AppTest.from_string(_page_script(page), default_timeout=30).run()
+        assert not app.exception, f"{page}: {app.exception}"

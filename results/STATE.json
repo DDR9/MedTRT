@@ -1,13 +1,13 @@
 {
   "current_phase": "COMPLETE",
   "run": {
-    "timestamp": "2026-11-06T08:32:33.215623+00:00",
+    "timestamp": "2026-11-06T09:10:56.640117+00:00",
     "code_fingerprint": "e9d4f060aaf1b130",
     "engine_fingerprint": "28d585aaed46e401",
-    "parent_commit": "1877455"
+    "parent_commit": "3ad7513"
   },
   "fast_profile": "trt_fp16_optimized",
-  "median_e2e_ms": 60.834,
-  "max_e2e_ms": 115.2963,
+  "median_e2e_ms": 68.8795,
+  "max_e2e_ms": 122.5894,
   "mean_dice": 0.964778
 }

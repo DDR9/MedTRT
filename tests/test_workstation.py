@@ -65,3 +65,25 @@ def test_cached_predictor_runs_at_its_own_precision(
     workstation.execute_profile_on_volume(Path("volume.nii.gz"), profile_name, (1.0, 1.0, 1.0), np.eye(4), None)
 
     assert seen == [(expected, expected)] * 2
+
+
+def test_fp32_vs_fp16_difference_heatmap_rendering() -> None:
+    ct_2d = np.linspace(-100.0, 200.0, 64 * 64, dtype=np.float32).reshape(64, 64)
+    fp32_mask = np.zeros((64, 64), dtype=np.uint8)
+    fp16_mask = np.zeros((64, 64), dtype=np.uint8)
+    fp32_mask[16:48, 16:48] = 1
+    fp16_mask[16:50, 16:50] = 1  # 2-pixel boundary dilation
+
+    heat = workstation.compute_fp32_vs_fp16_heatmap_2d(fp16_mask, fp32_mask)
+    assert heat.shape == (64, 64)
+    assert heat.dtype == np.float32
+    assert float(heat.min()) >= 0.0 and float(heat.max()) == pytest.approx(1.0)
+    assert float(heat[49, 32]) == pytest.approx(1.0)  # disagreeing boundary voxel peaks at 1.0
+
+    rgb_base = workstation.render_plane_rgb(ct_2d, None, None, None, 400.0, 40.0, "Hidden", 0.5)
+    rgb_heat = workstation.render_plane_rgb(
+        ct_2d, fp16_mask, None, fp32_mask, 400.0, 40.0, "FP32-vs-FP16 Difference Heatmap", 0.65
+    )
+    assert rgb_heat.shape == (64, 64, 3)
+    assert rgb_heat.dtype == np.uint8
+    assert np.any(rgb_heat != rgb_base)

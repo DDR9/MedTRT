@@ -1,0 +1,940 @@
+{
+  "run": {
+    "timestamp": "2026-11-06T09:10:56.640117+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "3ad7513"
+  },
+  "dataset": "MSD Task09_Spleen",
+  "total_patient_volumes": 41,
+  "heldout_validation_volumes": 9,
+  "training_cohort_volumes": 32,
+  "headline_benchmark_summary": {
+    "host_baseline_profile": "pytorch_fp32",
+    "optimized_profile": "trt_fp16_optimized",
+    "like_for_like_cuda_profile": "trt_fp16_cuda",
+    "monai_gpu_profile": "trt_fp16_gpu",
+    "host_e2e_median_ms": 2951.96,
+    "optimized_e2e_median_ms": 68.88,
+    "e2e_speedup_factor": 42.86,
+    "monai_gpu_preprocess_median_ms": 43.9,
+    "custom_cuda_preprocess_median_ms": 1.27,
+    "preprocess_speedup_factor_rounded": 33.8,
+    "preprocess_speedup_factor_raw": 34.51,
+    "monai_gpu_peak_vram_mb": 2301.3,
+    "custom_cuda_peak_vram_mb": 454.6,
+    "vram_reduction_factor": 5.06
+  },
+  "cohort_41_volumes_summary": {
+    "profile": "trt_fp16_optimized",
+    "volumes_verified": 41,
+    "e2e_median_ms": 87.44,
+    "e2e_iqr_ms": 43.55,
+    "preprocess_median_ms": 1.592,
+    "peak_vram_max_mb": 630.8
+  },
+  "per_volume": [
+    {
+      "case_id": "spleen_10",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        55
+      ],
+      "spacing_mm": [
+        0.9766,
+        0.9766,
+        5.0
+      ],
+      "voxels": 14417920,
+      "patch_windows": 50,
+      "ingest_ms": 28.131,
+      "preprocess_ms": 1.373,
+      "sw_network_ms": 36.978,
+      "postprocess_ms": 2.267,
+      "e2e_total_ms": 75.367,
+      "peak_vram_mb": 440.1
+    },
+    {
+      "case_id": "spleen_12",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        168
+      ],
+      "spacing_mm": [
+        0.7539,
+        0.7539,
+        1.5
+      ],
+      "voxels": 44040192,
+      "patch_windows": 32,
+      "ingest_ms": 69.419,
+      "preprocess_ms": 1.795,
+      "sw_network_ms": 20.027,
+      "postprocess_ms": 4.801,
+      "e2e_total_ms": 99.697,
+      "peak_vram_mb": 449.1
+    },
+    {
+      "case_id": "spleen_13",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        77
+      ],
+      "spacing_mm": [
+        0.7422,
+        0.7422,
+        2.5
+      ],
+      "voxels": 20185088,
+      "patch_windows": 16,
+      "ingest_ms": 37.677,
+      "preprocess_ms": 1.3,
+      "sw_network_ms": 9.607,
+      "postprocess_ms": 2.302,
+      "e2e_total_ms": 53.322,
+      "peak_vram_mb": 324.6
+    },
+    {
+      "case_id": "spleen_14",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        54
+      ],
+      "spacing_mm": [
+        0.8516,
+        0.8516,
+        5.0
+      ],
+      "voxels": 14155776,
+      "patch_windows": 32,
+      "ingest_ms": 23.313,
+      "preprocess_ms": 1.212,
+      "sw_network_ms": 26.499,
+      "postprocess_ms": 2.4,
+      "e2e_total_ms": 58.031,
+      "peak_vram_mb": 380.2
+    },
+    {
+      "case_id": "spleen_16",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        61
+      ],
+      "spacing_mm": [
+        0.793,
+        0.793,
+        8.0
+      ],
+      "voxels": 15990784,
+      "patch_windows": 64,
+      "ingest_ms": 27.997,
+      "preprocess_ms": 1.889,
+      "sw_network_ms": 39.251,
+      "postprocess_ms": 2.36,
+      "e2e_total_ms": 78.13,
+      "peak_vram_mb": 484.1
+    },
+    {
+      "case_id": "spleen_17",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        95
+      ],
+      "spacing_mm": [
+        0.6133,
+        0.6133,
+        2.5
+      ],
+      "voxels": 24903680,
+      "patch_windows": 18,
+      "ingest_ms": 41.315,
+      "preprocess_ms": 1.642,
+      "sw_network_ms": 11.825,
+      "postprocess_ms": 3.279,
+      "e2e_total_ms": 60.573,
+      "peak_vram_mb": 326.5
+    },
+    {
+      "case_id": "spleen_18",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        164
+      ],
+      "spacing_mm": [
+        0.9668,
+        0.9668,
+        1.5
+      ],
+      "voxels": 42991616,
+      "patch_windows": 50,
+      "ingest_ms": 65.516,
+      "preprocess_ms": 1.799,
+      "sw_network_ms": 38.906,
+      "postprocess_ms": 5.523,
+      "e2e_total_ms": 117.596,
+      "peak_vram_mb": 522.1
+    },
+    {
+      "case_id": "spleen_19",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        51
+      ],
+      "spacing_mm": [
+        0.7969,
+        0.7969,
+        5.0
+      ],
+      "voxels": 13369344,
+      "patch_windows": 32,
+      "ingest_ms": 21.934,
+      "preprocess_ms": 1.33,
+      "sw_network_ms": 23.481,
+      "postprocess_ms": 2.221,
+      "e2e_total_ms": 52.937,
+      "peak_vram_mb": 346.3
+    },
+    {
+      "case_id": "spleen_2",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        90
+      ],
+      "spacing_mm": [
+        0.7949,
+        0.7949,
+        5.0
+      ],
+      "voxels": 23592960,
+      "patch_windows": 48,
+      "ingest_ms": 41.052,
+      "preprocess_ms": 1.184,
+      "sw_network_ms": 36.343,
+      "postprocess_ms": 3.931,
+      "e2e_total_ms": 88.782,
+      "peak_vram_mb": 496.0
+    },
+    {
+      "case_id": "spleen_20",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        168
+      ],
+      "spacing_mm": [
+        0.9336,
+        0.9336,
+        1.5
+      ],
+      "voxels": 44040192,
+      "patch_windows": 50,
+      "ingest_ms": 69.805,
+      "preprocess_ms": 1.856,
+      "sw_network_ms": 33.853,
+      "postprocess_ms": 4.984,
+      "e2e_total_ms": 115.811,
+      "peak_vram_mb": 516.7
+    },
+    {
+      "case_id": "spleen_21",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        89
+      ],
+      "spacing_mm": [
+        0.7266,
+        0.7266,
+        2.5
+      ],
+      "voxels": 23330816,
+      "patch_windows": 32,
+      "ingest_ms": 39.111,
+      "preprocess_ms": 1.246,
+      "sw_network_ms": 20.018,
+      "postprocess_ms": 2.679,
+      "e2e_total_ms": 66.418,
+      "peak_vram_mb": 347.6
+    },
+    {
+      "case_id": "spleen_22",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        148
+      ],
+      "spacing_mm": [
+        0.9688,
+        0.9688,
+        1.5
+      ],
+      "voxels": 38797312,
+      "patch_windows": 50,
+      "ingest_ms": 61.587,
+      "preprocess_ms": 1.592,
+      "sw_network_ms": 31.888,
+      "postprocess_ms": 5.114,
+      "e2e_total_ms": 105.411,
+      "peak_vram_mb": 486.6
+    },
+    {
+      "case_id": "spleen_24",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        94
+      ],
+      "spacing_mm": [
+        0.7344,
+        0.7344,
+        5.0
+      ],
+      "voxels": 24641536,
+      "patch_windows": 48,
+      "ingest_ms": 42.091,
+      "preprocess_ms": 1.175,
+      "sw_network_ms": 34.115,
+      "postprocess_ms": 4.176,
+      "e2e_total_ms": 87.435,
+      "peak_vram_mb": 471.0
+    },
+    {
+      "case_id": "spleen_25",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        87
+      ],
+      "spacing_mm": [
+        0.7188,
+        0.7188,
+        2.5
+      ],
+      "voxels": 22806528,
+      "patch_windows": 32,
+      "ingest_ms": 37.208,
+      "preprocess_ms": 1.51,
+      "sw_network_ms": 20.398,
+      "postprocess_ms": 3.198,
+      "e2e_total_ms": 65.899,
+      "peak_vram_mb": 339.5
+    },
+    {
+      "case_id": "spleen_26",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        65
+      ],
+      "spacing_mm": [
+        0.6836,
+        0.6836,
+        5.0
+      ],
+      "voxels": 17039360,
+      "patch_windows": 18,
+      "ingest_ms": 32.546,
+      "preprocess_ms": 1.335,
+      "sw_network_ms": 11.811,
+      "postprocess_ms": 2.469,
+      "e2e_total_ms": 50.763,
+      "peak_vram_mb": 351.6
+    },
+    {
+      "case_id": "spleen_27",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        119
+      ],
+      "spacing_mm": [
+        0.7695,
+        0.7695,
+        4.0
+      ],
+      "voxels": 31195136,
+      "patch_windows": 48,
+      "ingest_ms": 55.97,
+      "preprocess_ms": 1.481,
+      "sw_network_ms": 28.672,
+      "postprocess_ms": 4.352,
+      "e2e_total_ms": 95.806,
+      "peak_vram_mb": 522.2
+    },
+    {
+      "case_id": "spleen_28",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        44
+      ],
+      "spacing_mm": [
+        0.9375,
+        0.9375,
+        5.0
+      ],
+      "voxels": 11534336,
+      "patch_windows": 50,
+      "ingest_ms": 20.791,
+      "preprocess_ms": 1.408,
+      "sw_network_ms": 56.137,
+      "postprocess_ms": 2.174,
+      "e2e_total_ms": 87.812,
+      "peak_vram_mb": 365.8
+    },
+    {
+      "case_id": "spleen_29",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        103
+      ],
+      "spacing_mm": [
+        0.8594,
+        0.8594,
+        5.0
+      ],
+      "voxels": 27000832,
+      "patch_windows": 64,
+      "ingest_ms": 48.479,
+      "preprocess_ms": 1.433,
+      "sw_network_ms": 44.823,
+      "postprocess_ms": 4.129,
+      "e2e_total_ms": 106.495,
+      "peak_vram_mb": 592.7
+    },
+    {
+      "case_id": "spleen_3",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        40
+      ],
+      "spacing_mm": [
+        0.7383,
+        0.7383,
+        5.0
+      ],
+      "voxels": 10485760,
+      "patch_windows": 32,
+      "ingest_ms": 17.876,
+      "preprocess_ms": 1.029,
+      "sw_network_ms": 24.114,
+      "postprocess_ms": 2.079,
+      "e2e_total_ms": 48.82,
+      "peak_vram_mb": 288.5
+    },
+    {
+      "case_id": "spleen_31",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        56
+      ],
+      "spacing_mm": [
+        0.7402,
+        0.7402,
+        5.0
+      ],
+      "voxels": 14680064,
+      "patch_windows": 32,
+      "ingest_ms": 27.118,
+      "preprocess_ms": 1.048,
+      "sw_network_ms": 19.235,
+      "postprocess_ms": 2.065,
+      "e2e_total_ms": 52.895,
+      "peak_vram_mb": 344.5
+    },
+    {
+      "case_id": "spleen_32",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        104
+      ],
+      "spacing_mm": [
+        0.9023,
+        0.9023,
+        5.0
+      ],
+      "voxels": 27262976,
+      "patch_windows": 64,
+      "ingest_ms": 56.65,
+      "preprocess_ms": 1.597,
+      "sw_network_ms": 48.672,
+      "postprocess_ms": 3.807,
+      "e2e_total_ms": 119.172,
+      "peak_vram_mb": 629.5
+    },
+    {
+      "case_id": "spleen_33",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        83
+      ],
+      "spacing_mm": [
+        0.9238,
+        0.9238,
+        5.0
+      ],
+      "voxels": 21757952,
+      "patch_windows": 75,
+      "ingest_ms": 44.546,
+      "preprocess_ms": 1.263,
+      "sw_network_ms": 59.401,
+      "postprocess_ms": 3.351,
+      "e2e_total_ms": 117.422,
+      "peak_vram_mb": 550.0
+    },
+    {
+      "case_id": "spleen_38",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        100
+      ],
+      "spacing_mm": [
+        0.8887,
+        0.8887,
+        5.0
+      ],
+      "voxels": 26214400,
+      "patch_windows": 64,
+      "ingest_ms": 53.268,
+      "preprocess_ms": 1.448,
+      "sw_network_ms": 40.362,
+      "postprocess_ms": 3.256,
+      "e2e_total_ms": 105.629,
+      "peak_vram_mb": 601.8
+    },
+    {
+      "case_id": "spleen_40",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        93
+      ],
+      "spacing_mm": [
+        0.75,
+        0.75,
+        5.0
+      ],
+      "voxels": 24379392,
+      "patch_windows": 48,
+      "ingest_ms": 52.169,
+      "preprocess_ms": 1.737,
+      "sw_network_ms": 31.172,
+      "postprocess_ms": 3.979,
+      "e2e_total_ms": 95.137,
+      "peak_vram_mb": 477.6
+    },
+    {
+      "case_id": "spleen_41",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        94
+      ],
+      "spacing_mm": [
+        0.9062,
+        0.9062,
+        5.0
+      ],
+      "voxels": 24641536,
+      "patch_windows": 48,
+      "ingest_ms": 40.946,
+      "preprocess_ms": 1.904,
+      "sw_network_ms": 33.831,
+      "postprocess_ms": 3.683,
+      "e2e_total_ms": 87.724,
+      "peak_vram_mb": 589.2
+    },
+    {
+      "case_id": "spleen_44",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        92
+      ],
+      "spacing_mm": [
+        0.8711,
+        0.8711,
+        5.0
+      ],
+      "voxels": 24117248,
+      "patch_windows": 48,
+      "ingest_ms": 56.096,
+      "preprocess_ms": 1.685,
+      "sw_network_ms": 34.723,
+      "postprocess_ms": 3.48,
+      "e2e_total_ms": 104.419,
+      "peak_vram_mb": 553.0
+    },
+    {
+      "case_id": "spleen_45",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        112
+      ],
+      "spacing_mm": [
+        0.9609,
+        0.9609,
+        4.0
+      ],
+      "voxels": 29360128,
+      "patch_windows": 75,
+      "ingest_ms": 60.169,
+      "preprocess_ms": 1.888,
+      "sw_network_ms": 55.274,
+      "postprocess_ms": 3.887,
+      "e2e_total_ms": 131.816,
+      "peak_vram_mb": 630.8
+    },
+    {
+      "case_id": "spleen_46",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        99
+      ],
+      "spacing_mm": [
+        0.6328,
+        0.6328,
+        5.0
+      ],
+      "voxels": 25952256,
+      "patch_windows": 36,
+      "ingest_ms": 44.524,
+      "preprocess_ms": 1.606,
+      "sw_network_ms": 25.611,
+      "postprocess_ms": 3.318,
+      "e2e_total_ms": 79.931,
+      "peak_vram_mb": 428.8
+    },
+    {
+      "case_id": "spleen_47",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        88
+      ],
+      "spacing_mm": [
+        0.7852,
+        0.7852,
+        5.0
+      ],
+      "voxels": 23068672,
+      "patch_windows": 48,
+      "ingest_ms": 38.112,
+      "preprocess_ms": 1.434,
+      "sw_network_ms": 34.83,
+      "postprocess_ms": 3.03,
+      "e2e_total_ms": 84.548,
+      "peak_vram_mb": 480.0
+    },
+    {
+      "case_id": "spleen_49",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        61
+      ],
+      "spacing_mm": [
+        0.8535,
+        0.8535,
+        4.0
+      ],
+      "voxels": 15990784,
+      "patch_windows": 32,
+      "ingest_ms": 30.297,
+      "preprocess_ms": 1.594,
+      "sw_network_ms": 23.229,
+      "postprocess_ms": 2.283,
+      "e2e_total_ms": 62.077,
+      "peak_vram_mb": 371.5
+    },
+    {
+      "case_id": "spleen_52",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        112
+      ],
+      "spacing_mm": [
+        0.8047,
+        0.8047,
+        4.0
+      ],
+      "voxels": 29360128,
+      "patch_windows": 48,
+      "ingest_ms": 48.131,
+      "preprocess_ms": 1.792,
+      "sw_network_ms": 35.004,
+      "postprocess_ms": 3.55,
+      "e2e_total_ms": 95.511,
+      "peak_vram_mb": 522.7
+    },
+    {
+      "case_id": "spleen_53",
+      "split": "training_cohort",
+      "shape": [
+        512,
+        512,
+        156
+      ],
+      "spacing_mm": [
+        0.8359,
+        0.8359,
+        3.0
+      ],
+      "voxels": 40894464,
+      "patch_windows": 48,
+      "ingest_ms": 63.241,
+      "preprocess_ms": 2.378,
+      "sw_network_ms": 34.609,
+      "postprocess_ms": 4.792,
+      "e2e_total_ms": 113.348,
+      "peak_vram_mb": 601.1
+    },
+    {
+      "case_id": "spleen_56",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        33
+      ],
+      "spacing_mm": [
+        0.6992,
+        0.6992,
+        7.0
+      ],
+      "voxels": 8650752,
+      "patch_windows": 18,
+      "ingest_ms": 17.328,
+      "preprocess_ms": 1.389,
+      "sw_network_ms": 14.344,
+      "postprocess_ms": 1.507,
+      "e2e_total_ms": 37.613,
+      "peak_vram_mb": 283.6
+    },
+    {
+      "case_id": "spleen_59",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        50
+      ],
+      "spacing_mm": [
+        0.9512,
+        0.9512,
+        5.0
+      ],
+      "voxels": 13107200,
+      "patch_windows": 50,
+      "ingest_ms": 25.907,
+      "preprocess_ms": 1.425,
+      "sw_network_ms": 37.67,
+      "postprocess_ms": 2.437,
+      "e2e_total_ms": 74.018,
+      "peak_vram_mb": 403.6
+    },
+    {
+      "case_id": "spleen_6",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        135
+      ],
+      "spacing_mm": [
+        0.9199,
+        0.9199,
+        1.6
+      ],
+      "voxels": 35389440,
+      "patch_windows": 50,
+      "ingest_ms": 57.726,
+      "preprocess_ms": 2.246,
+      "sw_network_ms": 45.319,
+      "postprocess_ms": 4.039,
+      "e2e_total_ms": 115.924,
+      "peak_vram_mb": 450.6
+    },
+    {
+      "case_id": "spleen_60",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        97
+      ],
+      "spacing_mm": [
+        0.793,
+        0.793,
+        5.0
+      ],
+      "voxels": 25427968,
+      "patch_windows": 64,
+      "ingest_ms": 53.282,
+      "preprocess_ms": 2.166,
+      "sw_network_ms": 69.943,
+      "postprocess_ms": 4.564,
+      "e2e_total_ms": 139.839,
+      "peak_vram_mb": 520.6
+    },
+    {
+      "case_id": "spleen_61",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        101
+      ],
+      "spacing_mm": [
+        0.7734,
+        0.7734,
+        5.0
+      ],
+      "voxels": 26476544,
+      "patch_windows": 64,
+      "ingest_ms": 50.654,
+      "preprocess_ms": 1.934,
+      "sw_network_ms": 51.434,
+      "postprocess_ms": 3.453,
+      "e2e_total_ms": 116.315,
+      "peak_vram_mb": 521.3
+    },
+    {
+      "case_id": "spleen_62",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        80
+      ],
+      "spacing_mm": [
+        0.6758,
+        0.6758,
+        5.0
+      ],
+      "voxels": 20971520,
+      "patch_windows": 27,
+      "ingest_ms": 45.533,
+      "preprocess_ms": 2.017,
+      "sw_network_ms": 29.398,
+      "postprocess_ms": 3.018,
+      "e2e_total_ms": 85.12,
+      "peak_vram_mb": 394.3
+    },
+    {
+      "case_id": "spleen_63",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        60
+      ],
+      "spacing_mm": [
+        0.752,
+        0.752,
+        5.0
+      ],
+      "voxels": 15728640,
+      "patch_windows": 32,
+      "ingest_ms": 27.024,
+      "preprocess_ms": 1.5,
+      "sw_network_ms": 26.889,
+      "postprocess_ms": 2.408,
+      "e2e_total_ms": 62.897,
+      "peak_vram_mb": 362.2
+    },
+    {
+      "case_id": "spleen_8",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        31
+      ],
+      "spacing_mm": [
+        0.7852,
+        0.7852,
+        7.5
+      ],
+      "voxels": 8126464,
+      "patch_windows": 32,
+      "ingest_ms": 16.03,
+      "preprocess_ms": 2.838,
+      "sw_network_ms": 27.626,
+      "postprocess_ms": 1.546,
+      "e2e_total_ms": 53.457,
+      "peak_vram_mb": 309.0
+    },
+    {
+      "case_id": "spleen_9",
+      "split": "validation_heldout",
+      "shape": [
+        512,
+        512,
+        41
+      ],
+      "spacing_mm": [
+        0.7441,
+        0.7441,
+        5.0
+      ],
+      "voxels": 10747904,
+      "patch_windows": 32,
+      "ingest_ms": 22.936,
+      "preprocess_ms": 1.812,
+      "sw_network_ms": 26.403,
+      "postprocess_ms": 1.927,
+      "e2e_total_ms": 58.103,
+      "peak_vram_mb": 293.3
+    }
+  ]
+}
