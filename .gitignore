@@ -21,3 +21,6 @@ venv/
 *.egg-info/
 build/
 dist/
+
+# Cross-agent GPU lock
+results/.gpu_busy

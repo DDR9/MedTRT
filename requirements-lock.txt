@@ -1,0 +1,19 @@
+# Exact versions that produced results/. Python 3.11, Windows 11, NVIDIA driver 591.44.
+--extra-index-url https://download.pytorch.org/whl/cu128
+matplotlib==3.11.2
+monai==1.6.1
+nibabel==5.4.2
+numpy==2.4.6
+onnx==1.23.2
+onnxruntime==1.31.1
+plotly==7.1.0
+pytest==9.2.0
+PyYAML==6.0.3
+scipy==1.17.1
+SimpleITK==2.5.7
+streamlit==1.66.1
+tensorrt_cu12==10.16.1.11
+tensorrt_cu12_bindings==10.16.1.11
+tensorrt_cu12_libs==10.16.1.11
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128

@@ -2,24 +2,29 @@
 Phase 1 Data & Bundle Manager (`src/medtrt/data.py`).
 
 Responsibilities:
-1. Ensure MONAI `spleen_ct_segmentation` bundle is present in `./bundles/spleen_ct_segmentation`.
-   Supports `monai.bundle.download` with direct fallback to MONAI Model Zoo GitHub release zip.
+1. Ensure the pinned MONAI `spleen_ct_segmentation` bundle is present in
+   `./bundles/spleen_ct_segmentation`, and verify the SHA-256 of its weights.
 2. Download and extract `Task09_Spleen.tar` from official MONAI AWS S3 bucket:
    `https://msd-for-monai.s3-us-west-2.amazonaws.com/Task09_Spleen.tar`
    into `./data/Task09_Spleen/`, verifying `imagesTr/`, `labelsTr/`, and `dataset.json`.
-3. Deterministically resolve the 9 held-out validation cases (per `configs/train.json` `@images[-9:]`
-   and alphanumeric sort fallback of all 41 `imagesTr` cases) and write `results/heldout_cases.json`.
+3. Deterministically resolve the 9 evaluation cases (`configs/train.json` `@images[-9:]`) and write
+   `results/heldout_cases.json`.
+
+About that split: these 9 cases never entered a gradient update, but they are the bundle's
+validation set, and its `CheckpointSaver` selected `model.pt` by Dice on exactly these cases. MSD
+test labels are not public, so no untouched test set exists here. Dice on these cases is an
+optimistic estimate: it is valid for comparing backends, not for estimating generalization.
 """
 
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import re
 import shutil
 import tarfile
 import urllib.request
-import zipfile
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -33,10 +38,8 @@ from medtrt.config import BUNDLES_DIR, DATA_DIR, MEDTRT_ROOT, RESULTS_DIR
 
 BUNDLE_NAME = "spleen_ct_segmentation"
 BUNDLE_PATH = BUNDLES_DIR / BUNDLE_NAME
-FALLBACK_BUNDLE_URL = (
-    "https://github.com/Project-MONAI/model-zoo/releases/download/"
-    "hosting_storage_0.4.0/spleen_ct_segmentation_v0.4.0.zip"
-)
+BUNDLE_VERSION = "0.6.1"
+BUNDLE_MODEL_SHA256 = "502c312893994ec071a85c4f2e7d83a43f7789969faa73dae62f1291177f50fe"
 MSD_SPLEEN_URL = "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task09_Spleen.tar"
 TASK09_DIR = DATA_DIR / "Task09_Spleen"
 UNCOMPRESSED_IMAGES_DIR = TASK09_DIR / "imagesTr_uncompressed"
@@ -66,6 +69,10 @@ def load_nifti_mmap(data: Dict[str, Any]) -> Dict[str, Any]:
     Memory-mapped NIfTI reader (`nibabel.load(..., mmap=True)`) on uncompressed `.nii` volumes.
     Constructs a channel-first `MetaTensor` `(1, X, Y, Z)` with original affine and spatial metadata
     compatible with MONAI's `Orientationd`, `Spacingd`, and `Invertd`.
+
+    This read is lazy: it maps the file and returns before the voxels are touched. The bytes are
+    read when the tensor is first used, normally inside `.to(device)`, so time this together with
+    the host-to-device copy. Timing it alone measures a file open, not a read.
     """
     d = dict(data)
     raw_path = Path(d["image"])
@@ -88,38 +95,33 @@ def load_nifti_mmap(data: Dict[str, Any]) -> Dict[str, Any]:
     return d
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def ensure_bundle() -> Path:
     """
-    Ensure `./bundles/spleen_ct_segmentation` is present.
-    Reuses existing local bundle if available, otherwise runs `monai.bundle.download`
-    with fallback to the GitHub release archive.
+    Ensure `./bundles/spleen_ct_segmentation` holds the pinned bundle, downloading it if needed.
+    Raises if the weights do not match `BUNDLE_MODEL_SHA256`, because every published number is
+    valid only for these exact weights.
     """
     model_pt = BUNDLE_PATH / "models" / "model.pt"
-    if model_pt.exists():
-        return BUNDLE_PATH
-
-    BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Check if already downloaded in sibling ../medical-ai/models/bundle/spleen_ct_segmentation
-    sibling_bundle = MEDTRT_ROOT.parent / "medical-ai" / "models" / "bundle" / BUNDLE_NAME
-    if (sibling_bundle / "models" / "model.pt").exists():
-        print(f"Copying cached MONAI bundle from {sibling_bundle} to {BUNDLE_PATH}...")
-        shutil.copytree(sibling_bundle, BUNDLE_PATH, dirs_exist_ok=True)
-        return BUNDLE_PATH
-
-    try:
-        print(f"Downloading MONAI bundle '{BUNDLE_NAME}' into {BUNDLES_DIR}...")
-        download(name=BUNDLE_NAME, bundle_dir=str(BUNDLES_DIR), progress=True)
-    except Exception as exc:
-        print(f"monai.bundle.download failed ({exc}); falling back to {FALLBACK_BUNDLE_URL}...")
-        zip_path = BUNDLES_DIR / "spleen_ct_segmentation.zip"
-        urllib.request.urlretrieve(FALLBACK_BUNDLE_URL, str(zip_path))
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(str(BUNDLES_DIR))
-        zip_path.unlink(missing_ok=True)
-
     if not model_pt.exists():
-        raise FileNotFoundError(f"Bundle model.pt not found at {model_pt}")
+        BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"Downloading MONAI bundle '{BUNDLE_NAME}' v{BUNDLE_VERSION} into {BUNDLES_DIR}...")
+        download(name=BUNDLE_NAME, version=BUNDLE_VERSION, bundle_dir=str(BUNDLES_DIR), progress=True)
+        if not model_pt.exists():
+            raise FileNotFoundError(f"Bundle model.pt not found at {model_pt}")
+
+    actual = _sha256(model_pt)
+    if actual != BUNDLE_MODEL_SHA256:
+        raise RuntimeError(
+            f"Bundle weights do not match the pinned SHA-256.\n  expected {BUNDLE_MODEL_SHA256}\n  found    {actual}"
+        )
     return BUNDLE_PATH
 
 
@@ -247,6 +249,8 @@ def resolve_heldout_split() -> Dict[str, Any]:
         "total_training_cases": len(all_images),
         "heldout_count": len(cases),
         "split_rule": split_source,
+        "split_role": "bundle_validation_split_used_for_checkpoint_selection",
+        "bundle_version": BUNDLE_VERSION,
         "bundle_validate_expr": train_val_expr,
         "bundle_reference_mean_dice": bundle_ref_dice,
         "case_ids": [c["case_id"] for c in cases],

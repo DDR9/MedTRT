@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -18,11 +20,57 @@ import monai
 import torch
 
 MEDTRT_ROOT = Path(__file__).resolve().parent.parent.parent
-RESULTS_DIR = MEDTRT_ROOT / "results"
+RESULTS_DIR = Path(os.environ.get("MEDTRT_RESULTS_DIR", MEDTRT_ROOT / "results"))
 DATA_DIR = MEDTRT_ROOT / "data"
 BUNDLES_DIR = MEDTRT_ROOT / "bundles"
 ENGINES_DIR = MEDTRT_ROOT / "engines"
 FIGURES_DIR = MEDTRT_ROOT / "docs" / "figures"
+
+# Modules whose content changes a measurement. Every result file is stamped with this hash, and
+# `verify_claims` rejects any set of results that mixes code versions.
+MEASUREMENT_MODULES = (
+    "bench.py",
+    "data.py",
+    "evaluate.py",
+    "infer.py",
+    "model.py",
+    "profiles.py",
+    "timing.py",
+    "trt_runner.py",
+)
+
+
+def code_fingerprint() -> str:
+    """SHA-256 over the measurement modules, normalized so line endings cannot change it."""
+    digest = hashlib.sha256()
+    for name in MEASUREMENT_MODULES:
+        digest.update(name.encode("utf-8"))
+        digest.update((MEDTRT_ROOT / "src" / "medtrt" / name).read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()[:16]
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(MEDTRT_ROOT), "rev-parse", "--short", "HEAD"], text=True, timeout=5
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _engine_fingerprint() -> str | None:
+    engine = ENGINES_DIR / "spleen_unet_fp16.engine"
+    return hashlib.sha256(engine.read_bytes()).hexdigest()[:16] if engine.exists() else None
+
+
+def run_metadata() -> Dict[str, Any]:
+    """Provenance stamped into every result file."""
+    return {
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "code_fingerprint": code_fingerprint(),
+        "engine_fingerprint": _engine_fingerprint(),
+        "parent_commit": _git_commit(),
+    }
 
 
 @dataclass
@@ -50,6 +98,28 @@ def _query_nvidia_driver() -> str:
         return out.strip().splitlines()[0]
     except Exception:
         return "unknown"
+
+
+def _query_driver_model() -> str:
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=driver_model.current", "--format=csv,noheader"],
+            text=True,
+            timeout=5,
+        )
+        return out.strip().splitlines()[0]
+    except Exception:
+        return "unknown"
+
+
+def _os_name() -> str:
+    """`platform.release()` can report 10 on Windows 11, so derive the name from the build number."""
+    version = platform.version()
+    if platform.system() == "Windows":
+        tail = version.split(".")[-1]
+        build = int(tail) if tail.isdigit() else 0
+        return f"Windows {'11' if build >= 22000 else platform.release()} ({version})"
+    return f"{platform.system()} {platform.release()} ({version})"
 
 
 def _query_tensorrt_status() -> Dict[str, Any]:
@@ -118,7 +188,7 @@ def run_env_audit() -> Dict[str, Any]:
 
     env_data: Dict[str, Any] = {
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "os": f"{platform.system()} {platform.release()} ({platform.version()})",
+        "os": _os_name(),
         "python_version": platform.python_version(),
         "cuda_available": cuda_available,
         "gpu_model": gpu_name,
@@ -127,6 +197,7 @@ def run_env_audit() -> Dict[str, Any]:
         "vram_mb": vram_mb,
         "compute_capability": compute_capability,
         "driver_version": _query_nvidia_driver(),
+        "driver_model": _query_driver_model(),
         "cuda_runtime_version": str(torch.version.cuda),
         "cudnn_version": cudnn_str,
         "pytorch_version": torch.__version__,
@@ -144,7 +215,7 @@ def run_env_audit() -> Dict[str, Any]:
         "current_phase": "PHASE_0",
         "phase_0_status": "PASS" if (cuda_available and trt_status["import_ok"]) else "BLOCKED_TRT_IMPORT" if cuda_available else "BLOCKED_NO_CUDA",
         "updated_at": env_data["timestamp"],
-        "env_json": str(env_path.relative_to(MEDTRT_ROOT)),
+        "env_json": "results/env.json",
         "notes": trt_status["error"] if not trt_status["import_ok"] else "All Phase 0 checks passed.",
     }
     state_path = RESULTS_DIR / "STATE.json"

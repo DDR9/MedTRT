@@ -1,0 +1,102 @@
+# MedTRT — Quantitative 3D CT Spleen Segmentation & GPU Acceleration Configuration
+# Platform: NVIDIA GeForce RTX 5080 Laptop GPU (SM 12.0, CUDA 12.8, TensorRT 10.16.0.72)
+
+project:
+  name: MedTRT
+  version: "0.2.0"
+  scope: "Research Prototype — Not FDA-Approved or Clinically Certified"
+  dataset: "Medical Segmentation Decathlon Task09_Spleen (9 held-out CT volumes)"
+
+model:
+  architecture: "monai.networks.nets.UNet"
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 2
+  channels: [16, 32, 64, 128, 256]
+  strides: [2, 2, 2, 2]
+  num_res_units: 2
+  norm: "BATCH"
+  checkpoint: "models/spleen_ct_segmentation/models/model.pt"
+  fold_conv_transpose_bn: true
+
+preprocessing:
+  orientation: "RAS"
+  target_pixdim_mm: [1.5, 1.5, 2.0]
+  intensity_window_hu: [-57.0, 164.0]
+  intensity_output_range: [0.0, 1.0]
+  clip_intensity: true
+
+inference:
+  roi_size: [96, 96, 96]
+  blending_mode: "gaussian"
+  default_profile: "trt_fp16_optimized"
+  profiles:
+    pytorch_fp32_strict:
+      backend: "pytorch"
+      precision: "fp32_strict"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    pytorch_fp32:
+      backend: "pytorch"
+      precision: "tf32"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    pytorch_amp:
+      backend: "pytorch"
+      precision: "amp_fp16"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    pytorch_fp16:
+      backend: "pytorch"
+      precision: "fp16"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    trt_fp32:
+      backend: "tensorrt"
+      engine: "engines/spleen_unet_fp32.engine"
+      precision: "fp32"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    trt_fp16:
+      backend: "tensorrt"
+      engine: "engines/spleen_unet_fp16.engine"
+      precision: "fp16"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: false
+    trt_fp16_gpu:
+      backend: "tensorrt"
+      engine: "engines/spleen_unet_fp16.engine"
+      precision: "fp16"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: true
+    trt_fp16_cuda:
+      backend: "tensorrt"
+      engine: "engines/spleen_unet_fp16.engine"
+      precision: "fp16"
+      sw_batch_size: 4
+      overlap: 0.5
+      device_transforms: true
+      custom_cuda_kernels: true
+    trt_fp16_optimized:
+      backend: "tensorrt"
+      engine: "engines/spleen_unet_fp16.engine"
+      precision: "fp16"
+      sw_batch_size: 8
+      overlap: 0.25
+      device_transforms: true
+      custom_cuda_kernels: true
+
+tensorrt_builder:
+  opset_version: 17
+  workspace_pool_gb: 4.0
+  dynamic_batch_profile:
+    min_shape: [1, 1, 96, 96, 96]
+    opt_shape: [4, 1, 96, 96, 96]
+    max_shape: [16, 1, 96, 96, 96]

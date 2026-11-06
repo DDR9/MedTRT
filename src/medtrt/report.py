@@ -1,402 +1,565 @@
 """
-Phase 8 Programmatic README & Figure Generator (`src/medtrt/report.py`).
+README Generator (`src/medtrt/report.py`).
 
-Ground Rule 1 Compliance:
-- Every number in `README.md`, tables, and charts is strictly parsed from `results/*.json`
-  and `results/*.csv`.
-- Generates `docs/figures/stage_breakdown.png` (stacked bar chart of median stage latencies
-  across all 5 backends).
-- Populates `medtrt/README.md` with Mermaid architecture diagram, hardware audit table,
-  5-backend benchmark matrix, Amdahl's Law decomposition, Nsight/NVTX trace analysis,
-  parameter sweep summary, Bland-Altman clinical validation, failure case audit, and
-  single-command reproducibility instructions (`make all`).
+Every number in `README.md` is read from `results/`, and every pass/fail word is computed from those
+numbers. `render_readme()` is deterministic, so `medtrt.verify_claims` can confirm the published
+README is an exact rendering of the results.
 """
 
 from __future__ import annotations
 
 import csv
-import datetime
 import json
 from pathlib import Path
 from typing import Any, Dict, List
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 from medtrt.config import FIGURES_DIR, MEDTRT_ROOT, RESULTS_DIR
+from medtrt.profiles import GPU_BASELINE, HOST_BASELINE, LIKE_FOR_LIKE, PROFILES, REFERENCE, SHIPPING
 
-BACKEND_ORDER = [
-    ("pytorch_fp32_strict", "PyTorch FP32 (Strict IEEE)"),
-    ("pytorch_fp32", "PyTorch FP32 (Default TF32)"),
-    ("pytorch_amp", "PyTorch AMP (FP16 Autocast)"),
-    ("trt_fp16", "TensorRT 10.x FP16 (Zero-Copy)"),
-    ("trt_fp16_optimized", "TensorRT 10.x FP16 (Stage 2 Optimized)"),
-]
+STAGES = (
+    ("load", "load", "#4C78A8"),
+    ("preprocess", "preprocess", "#F58518"),
+    ("h2d", "h2d", "#72B7B2"),
+    ("sw_network", "sw_network", "#54A24B"),
+    ("sw_aggregate", "sw_aggregate", "#EECA3B"),
+    ("postprocess", "postprocess", "#E45756"),
+)
 
 
-def _load_json(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
+def _json(name: str) -> Dict[str, Any]:
+    with open(RESULTS_DIR / name, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def _load_csv(path: Path) -> List[Dict[str, str]]:
-    if not path.exists():
-        return []
-    with open(path, "r", encoding="utf-8") as f:
+def _csv(name: str) -> List[Dict[str, str]]:
+    with open(RESULTS_DIR / name, "r", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-def generate_stage_breakdown_chart(bench_map: Dict[str, Dict[str, Any]]) -> Path:
-    """
-    Generate stacked bar chart (`docs/figures/stage_breakdown.png`) comparing
-    full-volume stage latencies and zoomed GPU `sw_network` latencies across all 5 backends.
-    """
+def _table(header: List[str], rows: List[List[str]], align: List[str] | None = None) -> str:
+    marks = align or [":---"] + [":---:"] * (len(header) - 1)
+    lines = ["| " + " | ".join(header) + " |", "| " + " | ".join(marks) + " |"]
+    lines += ["| " + " | ".join(r) + " |" for r in rows]
+    return "\n".join(lines)
+
+
+def _status(ok: bool) -> str:
+    return "PASS" if ok else "**FAIL**"
+
+
+def generate_stage_breakdown_chart(bench: Dict[str, Dict[str, Any]]) -> Path:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    labels = [label for key, label in BACKEND_ORDER if key in bench_map]
-    keys = [key for key, _ in BACKEND_ORDER if key in bench_map]
-
-    stages = [
-        ("load", "load (NIfTI I/O)", "#4C78A8"),
-        ("preprocess", "preprocess (Resample/HU)", "#F58518"),
-        ("h2d", "h2d (PCIe Transfer)", "#72B7B2"),
-        ("sw_network", "sw_network (3D UNet Forward)", "#54A24B"),
-        ("sw_aggregate", "sw_aggregate (Window Stitch)", "#EECA3B"),
-        ("postprocess", "postprocess (Invertd/Argmax)", "#E45756"),
-    ]
-
-    fig, (ax_e2e, ax_net) = plt.subplots(1, 2, figsize=(13.5, 5.6), dpi=160)
-    x = np.arange(len(keys))
-    bottoms = np.zeros(len(keys), dtype=np.float64)
-
-    for stg_key, stg_label, color in stages:
-        vals = np.array(
-            [bench_map[k]["stage_latency_ms"][stg_key]["median"] for k in keys],
-            dtype=np.float64,
-        )
-        ax_e2e.bar(x, vals, bottom=bottoms, width=0.55, color=color, edgecolor="black", linewidth=0.6, label=stg_label)
-        bottoms += vals
-
-    for idx, k in enumerate(keys):
-        e2e_med = bench_map[k]["stage_latency_ms"]["e2e_total"]["median"]
-        ax_e2e.text(idx, bottoms[idx] + 60.0, f"{e2e_med:.0f} ms", ha="center", va="bottom", fontsize=8.5, fontweight="bold")
-
-    ax_e2e.set_xticks(x)
-    ax_e2e.set_xticklabels(labels, rotation=18, ha="right", fontsize=8.5)
-    ax_e2e.set_ylabel("Median Stage Latency per Volume (ms)")
-    ax_e2e.set_title("End-to-End Stage Breakdown Across Backends", fontweight="bold")
-    ax_e2e.legend(loc="upper right", fontsize=8)
-    ax_e2e.grid(axis="y", linestyle="--", alpha=0.4)
-
-    # Right subplot: Pure 3D UNet Network Forward Latency (`sw_network`) + `sw_aggregate`
-    net_vals = np.array([bench_map[k]["stage_latency_ms"]["sw_network"]["median"] for k in keys])
-    agg_vals = np.array([bench_map[k]["stage_latency_ms"]["sw_aggregate"]["median"] for k in keys])
-    ax_net.bar(x, net_vals, width=0.55, color="#54A24B", edgecolor="black", linewidth=0.6, label="sw_network (3D UNet Forward)")
-    ax_net.bar(x, agg_vals, bottom=net_vals, width=0.55, color="#EECA3B", edgecolor="black", linewidth=0.6, label="sw_aggregate (Gaussian Stitch)")
-
-    base_net = net_vals[1] if len(net_vals) > 1 else net_vals[0]
-    for idx, (nv, av) in enumerate(zip(net_vals, agg_vals)):
-        sp = base_net / max(nv, 1e-6)
-        ax_net.text(idx, nv + av + 5.0, f"{nv:.1f} ms\n({sp:.2f}x)", ha="center", va="bottom", fontsize=8.5, fontweight="bold")
-
-    ax_net.set_xticks(x)
-    ax_net.set_xticklabels(labels, rotation=18, ha="right", fontsize=8.5)
-    ax_net.set_ylabel("Median GPU Sliding-Window Latency (ms)")
-    ax_net.set_title("Isolated GPU Sliding-Window Execution (sw_network + sw_aggregate)", fontweight="bold")
-    ax_net.legend(loc="upper right", fontsize=8.5)
-    ax_net.grid(axis="y", linestyle="--", alpha=0.4)
-
+    groups = (
+        ("Host path", [k for k in bench if not PROFILES[k].gpu_path]),
+        ("GPU path", [k for k in bench if PROFILES[k].gpu_path]),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.4), dpi=160)
+    for ax, (title, keys) in zip(axes, groups):
+        x = np.arange(len(keys))
+        bottoms = np.zeros(len(keys))
+        for stage, label, color in STAGES:
+            vals = np.array([bench[k]["stage_latency_ms"][stage]["median"] for k in keys])
+            ax.bar(x, vals, bottom=bottoms, width=0.6, color=color, edgecolor="black", linewidth=0.5, label=label)
+            bottoms += vals
+        for i, k in enumerate(keys):
+            ax.text(i, bottoms[i] * 1.01, f"{bench[k]['stage_latency_ms']['e2e_total']['median']:.0f} ms",
+                    ha="center", va="bottom", fontsize=8.5, fontweight="bold")  # fmt: skip
+        ax.set_xticks(x)
+        ax.set_xticklabels(keys, rotation=20, ha="right", fontsize=8.5)
+        ax.set_ylabel("Median latency per volume (ms)")
+        ax.set_title(f"{title} (separate y-axes)", fontweight="bold")
+        ax.grid(axis="y", linestyle="--", alpha=0.4)
+    axes[0].legend(fontsize=8)
     plt.tight_layout()
-    out_fig = FIGURES_DIR / "stage_breakdown.png"
-    plt.savefig(out_fig, bbox_inches="tight")
+    out = FIGURES_DIR / "stage_breakdown.png"
+    plt.savefig(out, bbox_inches="tight")
     plt.close(fig)
-    return out_fig
+    return out
+
+
+def render_readme() -> str:
+    env = _json("env.json")
+    build = _json("trt_build.json")
+    agreement = _json("bland_altman.json")
+    failures = _json("failure_analysis.json")
+    timeline = _json("timeline_summary.json")
+    ablation = _json("ablation.json")["rungs"]
+    probes = _json("probes.json")
+    heldout = _json("heldout_cases.json")
+    sweep = _csv("sweep.csv")
+    bench = {k: _json(f"bench_{k}.json") for k in PROFILES}
+    evals = {k: _csv(f"eval_{k}.csv") for k in PROFILES}
+
+    def stage(name: str, key: str) -> Dict[str, float]:
+        return bench[name]["stage_latency_ms"][key]
+
+    def e2e(name: str) -> float:
+        return stage(name, "e2e_total")["median"]
+
+    def mean_dice(name: str) -> float:
+        return float(np.mean([float(r["dice"]) for r in evals[name]]))
+
+    def sd_dice(name: str) -> float:
+        return float(np.std([float(r["dice"]) for r in evals[name]], ddof=1))
+
+    ship = PROFILES[SHIPPING]
+    ship_agree = agreement["profiles"][SHIPPING]
+    ship_dice = ship_agree["dice_vs_reference"]
+    ship_vol = ship_agree["volume_vs_reference"]
+    per_case = bench[SHIPPING]["per_case"]
+    case_medians = {c: v["e2e_total"]["median"] for c, v in per_case.items()}
+    max_pass = stage(SHIPPING, "e2e_total")["max"]
+    n_under_200 = sum(v < 200.0 for v in case_medians.values())
+
+    net = probes["network_sustained"]
+    bundle_key = "0.5|4"
+    fast_key = f"{ship.overlap}|{ship.sw_batch_size}"
+    fp16 = probes["fp16_numerics"]
+    ingest = probes["ingestion"]
+
+    results = _table(
+        ["Measure", f"Fast profile (`{SHIPPING}`)", "Notes"],
+        [
+            ["End-to-end latency", f"`{e2e(SHIPPING):.1f} ms` median", f"Per-case medians `{min(case_medians.values()):.0f}`-`{max(case_medians.values()):.0f} ms`; slowest of 90 passes `{max_pass:.0f} ms`"],
+            ["Speedup vs host-path PyTorch", f"`{e2e(HOST_BASELINE) / e2e(SHIPPING):.1f}x`", f"`{e2e(HOST_BASELINE):.0f} ms` baseline with CPU inverse transform and gzip reads"],
+            ["Speedup vs GPU-path PyTorch", f"`{e2e(GPU_BASELINE) / e2e(SHIPPING):.2f}x`", f"`{e2e(GPU_BASELINE):.0f} ms` with the same GPU pipeline and bundle windows, no TensorRT"],
+            ["TensorRT alone, same pipeline and windows", f"`{e2e(GPU_BASELINE) / e2e(LIKE_FOR_LIKE):.2f}x` end to end", f"`{e2e(GPU_BASELINE):.0f}` to `{e2e(LIKE_FOR_LIKE):.0f} ms`"],
+            ["Mean Dice", f"`{ship_dice['mean_dice']:.6f}`", f"True FP32 reference `{agreement['reference_mean_dice']:.6f}`"],
+            ["Mean / max per-case Dice change vs FP32", f"`{ship_dice['mean_abs_delta_dice']:.6f}` / `{ship_dice['max_abs_delta_dice']:.6f}`", f"`{ship_dice['n_cases_over_tolerance']}` of `{ship_vol['n']}` cases at or over `{ship_dice['tolerance']}`"],
+            ["Volume bias vs FP32", f"`{ship_vol['bias_cm3']:+.2f} cm³` (`{ship_vol['bias_pct_of_mean_volume']:+.2f}%`)", f"95% CI `[{ship_vol['bias_ci95_lower_cm3']:+.2f}, {ship_vol['bias_ci95_upper_cm3']:+.2f}]`; `{ship_vol['n_positive']}` of `{ship_vol['n']}` cases positive"],
+            ["Peak VRAM", f"`{bench[SHIPPING]['peak_vram_mb']['max'] / 1024:.2f} GB`", "Largest case"],
+        ],
+        [":---", ":---", ":---"],
+    )
+
+    l4l_dice = agreement["profiles"][LIKE_FOR_LIKE]["dice_vs_reference"]
+    targets = _table(
+        ["Target", "Measured", "Status"],
+        [
+            ["Every pass under 500 ms", f"Slowest pass `{max_pass:.1f} ms`", _status(max_pass < 500.0)],
+            ["Mean Dice at least 0.960", f"`{ship_dice['mean_dice']:.6f}`", _status(ship_dice["mean_dice"] >= 0.960)],
+            ["Mean absolute Dice change under 0.005", f"`{ship_dice['mean_abs_delta_dice']:.6f}`", _status(ship_dice["mean_within_tolerance"])],
+            [f"Like-for-like (`{LIKE_FOR_LIKE}`) every case Dice change under 0.005", f"Max `{l4l_dice['max_abs_delta_dice']:.6f}` (`{SHIPPING}` max `{ship_dice['max_abs_delta_dice']:.6f}`)", _status(l4l_dice["every_case_within_tolerance"])],
+        ],
+    )
+
+    ladder_rows = []
+    base = ablation["a_host_tf32"]["stages_ms"]["e2e_total"]["median"]
+    for rung in ablation.values():
+        p = rung["profile"]
+        med = rung["stages_ms"]["e2e_total"]["median"]
+        ladder_rows.append(
+            [
+                p["label"],
+                f"`{med:.1f}`",
+                f"`{rung['stages_ms']['e2e_total']['max']:.1f}`",
+                f"`{base / med:.2f}x`",
+                f"`{rung['stages_ms']['sw_network']['median']:.1f}`",
+                f"`{rung['mean_dice']:.6f}`",
+            ]
+        )
+    ladder = _table(["Configuration", "E2E median (ms)", "Slowest pass (ms)", "vs first row", "`sw_network` (ms)", "Mean Dice"], ladder_rows)
+
+    def rung_e2e(key: str) -> float:
+        return ablation[key]["stages_ms"]["e2e_total"]["median"]
+
+    def rung_net(key: str) -> float:
+        return ablation[key]["stages_ms"]["sw_network"]["median"]
+
+    matrix_rows = []
+    for k, p in PROFILES.items():
+        patch = bench[k]["patch_forward_latency_ms"]
+        s_e2e = stage(k, "e2e_total")
+        matrix_rows.append(
+            [
+                f"`{k}`",
+                f"`{p.overlap}` / `{p.sw_batch_size}`",
+                f"`{patch['batch_1']['median']:.2f}`",
+                f"`{patch['batch_4']['median']:.2f}`",
+                f"`{stage(k, 'sw_network')['median']:.1f}`",
+                f"`{s_e2e['median']:.1f}` [`{s_e2e['iqr']:.1f}`]",
+                f"`{s_e2e['max']:.0f}`",
+                f"`{bench[k]['peak_vram_mb']['max']:.0f}`",
+                f"`{mean_dice(k):.6f}` ± `{sd_dice(k):.4f}`",
+                f"`{e2e(HOST_BASELINE) / s_e2e['median']:.2f}x`",
+            ]
+        )
+    matrix = _table(
+        ["Profile", "Overlap / batch", "Patch B=1 (ms)", "Patch B=4 (ms)", "`sw_network` (ms)", "E2E median [IQR] (ms)", "Slowest (ms)", "Peak VRAM (MB)", "Mean Dice ± SD", f"vs `{HOST_BASELINE}`"],
+        matrix_rows,
+    )
+
+    stage_rows = []
+    for key in ("load", "h2d", "ingest", "preprocess", "sw_network", "sw_aggregate", "postprocess", "e2e_total", "wall_ms"):
+        stage_rows.append([f"`{key}`"] + [f"`{stage(k, key)['median']:.1f}`" for k in PROFILES])
+    stages = _table(["Stage (median ms)"] + [f"`{k}`" for k in PROFILES], stage_rows)
+
+    case_rows = []
+    shapes = {r["case_id"]: r for r in evals[SHIPPING]}
+    for c, v in per_case.items():
+        r = shapes[c]
+        case_rows.append(
+            [
+                f"`{c}`",
+                f"`{r['shape_x']}x{r['shape_y']}x{r['shape_z']}`",
+                f"`{v['patch_windows']}`",
+                f"`{v['e2e_total']['median']:.1f}`",
+                f"`{v['e2e_total']['max']:.1f}`",
+                f"`{v['peak_vram_mb']['max']:.0f}`",
+            ]
+        )
+    cases = _table(["Case", "Shape", "Windows", "E2E median (ms)", "Slowest (ms)", "Peak VRAM (MB)"], case_rows)
+
+    net_rows = []
+    for name, label in (
+        ("strict_fp32", "PyTorch FP32"),
+        ("tf32", "PyTorch TF32"),
+        ("tf32_tuned", "PyTorch TF32, `cudnn.benchmark`"),
+        ("amp", "PyTorch AMP"),
+        ("amp_tuned", "PyTorch AMP, `cudnn.benchmark`"),
+        ("trt", "TensorRT FP16"),
+    ):
+        b_ms = net[f"{name}|{bundle_key}"]["sw_network_ms_median"]
+        f_ms = net[f"{name}|{fast_key}"]["sw_network_ms_median"]
+        trt_b = net[f"trt|{bundle_key}"]["sw_network_ms_median"]
+        net_rows.append([label, f"`{b_ms:.1f}`", f"`{f_ms:.1f}`", f"`{b_ms / trt_b:.2f}x`"])
+    network = _table(["Backend", "Bundle windows (ms)", "Fast windows (ms)", "TensorRT speedup, bundle windows"], net_rows)
+    windows_bundle = net[f"trt|{bundle_key}"]["windows_all_cases"]
+    windows_fast = net[f"trt|{fast_key}"]["windows_all_cases"]
+
+    clock_rows = [
+        [f"`{k.split('|')[0]}`", f"`{v['back_to_back_ms_median']:.1f}`", f"`{v['after_3s_idle_ms_median']:.1f}`", f"`{v['idle_inflation']:.2f}x`"]
+        for k, v in probes["clock_state"].items()
+    ]
+    clock = _table(["Backend", "Back-to-back (ms)", "After 3 s idle (ms)", "Inflation"], clock_rows)
+
+    ingestion = _table(
+        ["Read path", "Read call (ms)", "Through to GPU (ms)"],
+        [
+            ["`.nii.gz` with `LoadImaged`", f"`{ingest['gzip']['read_ms_median']:.1f}`", f"`{ingest['gzip']['to_gpu_total_ms_median']:.1f}`"],
+            ["`.nii`, eager read", f"`{ingest['nii_eager']['read_ms_median']:.1f}`", f"`{ingest['nii_eager']['to_gpu_total_ms_median']:.1f}`"],
+            ["`.nii`, `mmap` (lazy)", f"`{ingest['nii_mmap']['read_ms_median']:.1f}`", f"`{ingest['nii_mmap']['to_gpu_total_ms_median']:.1f}`"],
+        ],
+    )
+
+    amdahl_rows = []
+    for k in (HOST_BASELINE, "trt_fp16", GPU_BASELINE, SHIPPING):
+        a = bench[k]["amdahl"]
+        amdahl_rows.append(
+            [
+                f"`{k}`",
+                f"`{a['median_sw_network_ms']:.1f}`",
+                f"`{a['median_e2e_ms']:.1f}`",
+                f"`{a['network_fraction_p'] * 100:.1f}%`",
+                f"`{a['theoretical_max_e2e_speedup_1_over_s']:.2f}x`",
+            ]
+        )
+    amdahl = _table(["Profile", "`sw_network` (ms)", "E2E (ms)", "Network share", "Max E2E gain from a faster network"], amdahl_rows)
+
+    sweep_rows = [
+        [
+            f"`{float(r['overlap']):.2f}`",
+            f"`{r['sw_batch_size']}`",
+            f"`{float(r['median_sw_latency_ms']):.1f}`",
+            f"`{float(r['iqr_sw_latency_ms']):.1f}`",
+            f"`{float(r['incremental_vram_mb']):.0f}`",
+            f"`{float(r['mean_dice']):.6f}`",
+            "yes" if r["pareto_optimal"] == "True" else "",
+            "yes" if r["is_fast_profile"] == "True" else "",
+        ]
+        for r in sweep
+    ]
+    sweep_table = _table(["Overlap", "Batch", "Median (ms)", "IQR (ms)", "Added VRAM (MB)", "Mean Dice", "Pareto-optimal", "Fast profile"], sweep_rows)
+    fast_row = next(r for r in sweep if r["is_fast_profile"] == "True")
+    if fast_row["pareto_optimal"] == "True":
+        sweep_note = "The fast profile is on the measured Pareto frontier."
+    else:
+        sweep_note = "The fast profile is not on the measured Pareto frontier of this sweep; its window settings are a judgment call."
+
+    agree_rows = []
+    for k, block in agreement["profiles"].items():
+        d, v = block["dice_vs_reference"], block["volume_vs_reference"]
+        agree_rows.append(
+            [
+                f"`{k}`",
+                f"`{d['mean_dice']:.6f}`",
+                f"`{d['mean_delta_dice']:+.6f}`",
+                f"`{d['mean_abs_delta_dice']:.6f}`",
+                f"`{d['max_abs_delta_dice']:.6f}`",
+                f"`{d['n_cases_over_tolerance']}`",
+                f"`{v['bias_cm3']:+.2f}` [`{v['bias_ci95_lower_cm3']:+.2f}`, `{v['bias_ci95_upper_cm3']:+.2f}`]",
+                f"[`{v['loa_lower_cm3']:+.2f}`, `{v['loa_upper_cm3']:+.2f}`]",
+                f"`{v['n_positive']}/{v['n']}`",
+                f"`{block['volume_vs_gt']['mae_cm3']:.2f}`",
+            ]
+        )
+    agree = _table(
+        ["Profile", "Mean Dice", "Mean ΔDice", "Mean abs ΔDice", "Max abs ΔDice", "Cases ≥ 0.005", "Volume bias (cm³) [95% CI]", "95% LoA (cm³)", "Volume larger than FP32", "MAE vs ground truth (cm³)"],
+        agree_rows,
+    )
+
+    val_rows = []
+    for r in _csv("validation.csv"):
+        val_rows.append(
+            [
+                f"`{r['case_id']}`",
+                f"`{float(r['v_gt_cm3']):.2f}`",
+                f"`{float(r[f'v_{REFERENCE}']):.2f}`",
+                f"`{float(r[f'v_{SHIPPING}']):.2f}`",
+                f"`{float(r[f'delta_v_{SHIPPING}']):+.3f}`",
+                f"`{float(r[f'dice_{REFERENCE}']):.6f}`",
+                f"`{float(r[f'dice_{SHIPPING}']):.6f}`",
+                f"`{float(r[f'delta_dice_{SHIPPING}']):+.6f}`",
+            ]
+        )
+    per_case_agree = _table(["Case", "V ground truth", "V FP32", "V fast", "ΔV", "Dice FP32", "Dice fast", "ΔDice"], val_rows)
+
+    cross = failures["cross_case"]
+    failure_lines = []
+    for w in failures["worst_cases"]:
+        e = w["errors"]
+        failure_lines.append(
+            f"- **`{w['case_id']}`:** Dice `{w['dice']:.4f}` (FP32 `{w['dice_strict_fp32']:.4f}`), volume `{w['v_pred_cm3']:.1f}` vs `{w['v_gt_cm3']:.1f} cm³`, "
+            f"spacing `{w['voxel_spacing_mm']}` mm. False-positive voxels `{e['false_positive_voxels']}`, false-negative `{e['false_negative_voxels']}`. "
+            f"The `{e['polar_slices_per_end']}` end slices at each pole, plus any slices beyond the organ, hold `{e['polar_share_of_error_voxels'] * 100:.0f}%` of error voxels "
+            f"and `{e['polar_share_of_gt_voxels'] * 100:.0f}%` of ground-truth voxels. `{e['gt_surface_voxel_fraction'] * 100:.0f}%` of ground-truth voxels are surface voxels."
+        )
+
+    fold = probes.get("fold_effect", {})
+    fold_section = ""
+    if fold.get("available"):
+        rows = [
+            [
+                label,
+                f"`{fold[key]['mean_dice']:.6f}`",
+                f"`{fold[key]['mean_abs_delta_dice']:.6f}`",
+                f"`{fold[key]['volume_bias_cm3']:+.3f}`",
+                f"`{fold[key]['n_positive']}/{fold[key]['n']}`",
+            ]
+            for label, key in (("Unfolded FP16 engine", "unfolded"), ("Folded FP16 engine", "folded"))
+        ]
+        fold_section = (
+            "### The BatchNorm fold\n\n"
+            "The exported ONNX graph keeps `BatchNorm` after each `ConvTranspose3d`. Layer "
+            f"`{fold['largest_bn_shift_layer']}` applies a shift of `{fold['largest_bn_shift']:.1f}`, a magnitude where FP16 "
+            "values are spaced `0.0625` apart. Folding these layers into the preceding `ConvTranspose3d` in float64 before "
+            f"export changes FP32 logits by at most `{fold['fp32_fold_max_abs_logit_diff']:.1e}`, so it does not change the model. "
+            "Both engines below run the same inputs and windows, compared with FP32 on the unmodified bundle weights.\n\n"
+            + _table(["Engine", "Mean Dice", "Mean abs ΔDice", "Volume bias (cm³)", "Volume larger than FP32"], rows)
+            + "\n\nThe unfolded engine's higher Dice is a side effect of that shift, not better accuracy."
+        )
+
+    trt_vol = agreement["profiles"][LIKE_FOR_LIKE]["volume_vs_reference"]
+    if trt_vol["bias_ci_excludes_zero"]:
+        drift_line = (
+            f"TensorRT FP16 shifts volume by a small, consistent amount: `{trt_vol['bias_cm3']:+.3f} cm³` at bundle "
+            f"windows, with `{trt_vol['n_positive']}` of `{trt_vol['n']}` cases larger than FP32."
+        )
+    else:
+        drift_line = (
+            f"TensorRT FP16 shows no systematic volume shift at bundle windows: `{trt_vol['bias_cm3']:+.3f} cm³`, "
+            f"with `{trt_vol['n_positive']}` of `{trt_vol['n']}` cases larger than FP32."
+        )
+
+    if timeline["nsys_cli_executed"]:
+        nsight_line = f"Nsight Systems ran, and its trace is `{timeline['nsys_rep_path']}`."
+    else:
+        nsight_line = (
+            "Nsight Systems was not run for these results. NVTX ranges are in the code, and `--nsys` will use them when "
+            "Nsight is installed, but every number here comes from CUDA events and wall-clock timers."
+        )
+
+    return f"""# MedTRT: GPU-Accelerated 3D CT Segmentation, Profiled and Validated
+
+> **Research benchmark only.** This is a systems study of one public model on one laptop. It is not a medical device, and it makes no diagnostic, triage, or clinical performance claims.
+>
+> Every number below is generated from `results/`. To check them without a GPU, run `python -m medtrt.verify_claims`.
+
+## 1. Results
+
+A pretrained MONAI 3D UNet segments the spleen in abdominal CT. All timings are on an `{env['gpu_model']}`.
+
+{results}
+
+### Targets
+
+{targets}
+
+## 2. Where the speedup comes from
+
+Most of the end-to-end gain is not TensorRT. Each row below changes one thing, using the same 9 cases.
+
+{ladder}
+
+- **Keeping the inverse transform on the GPU is the largest single change.** The reference `inference.json` already keeps predictions on the GPU, so the host path overstates the cost of a default deployment. With gzip reads, this alone moves PyTorch from `{rung_e2e('a_host_tf32'):.0f}` to `{rung_e2e('c_gpu_gzip_tf32'):.0f} ms`.
+- **Removing gzip from the critical path** moves PyTorch to `{rung_e2e('e_gpu_nii_tf32'):.0f} ms`. It assumes volumes were decompressed ahead of time.
+- **TensorRT** then takes the same pipeline from `{rung_e2e('e_gpu_nii_tf32'):.0f}` to `{rung_e2e('f_gpu_nii_trt'):.0f} ms`. PyTorch without TensorRT already meets the 500 ms target.
+- **Inverting class probabilities rather than hard labels matters for accuracy.** Nearest-label inversion scores `{ablation['i_fast_trt_nn']['mean_dice']:.6f}` Dice at `{rung_e2e('i_fast_trt_nn'):.0f} ms`. Trilinear scores `{ablation['h_fast_trt']['mean_dice']:.6f}` at `{rung_e2e('h_fast_trt'):.0f} ms`.
+
+## 3. Method
+
+{_table(["Component", "Value"], [
+    ["GPU", f"`{env['gpu_model']}`, compute capability `{env['compute_capability']}`, `{env['vram_gb']} GB`"],
+    ["Driver", f"`{env['driver_version']}`, `{env.get('driver_model', 'unknown')}` mode, CUDA `{env['cuda_runtime_version']}`, cuDNN `{env['cudnn_version']}`"],
+    ["Software", f"PyTorch `{env['pytorch_version']}`, MONAI `{env['monai_version']}`, TensorRT `{env['tensorrt_version']}`, Python `{env['python_version']}`"],
+    ["OS", f"`{env['os']}`"],
+    ["ONNX export", f"Opset `{build['onnx']['opset_version']}`, max abs diff vs FP32 `{build['onnx']['max_abs_diff_vs_pytorch_fp32']:.3e}` on one synthetic batch"],
+    ["TensorRT engine", f"FP16, dynamic batch 1 to 8, optimized for 2, `{build['engine_size_mb']:.2f} MB`"],
+], [":---", ":---"])}
+
+- **Data:** Medical Segmentation Decathlon `Task09_Spleen` and the MONAI `spleen_ct_segmentation` bundle v`{heldout.get('bundle_version', '0.6.1')}`, with weights verified by SHA-256.
+- **Evaluation cases:** the `{heldout['heldout_count']}` of `{heldout['total_training_cases']}` labeled cases that the bundle reserves for validation. They were never trained on, but the bundle selected its checkpoint by Dice on these same cases, and MSD test labels are not public. There is no untouched test set here, so treat Dice as an optimistic estimate, suitable for comparing backends.
+- **Timing:** 3 warm-up volumes, then 10 passes on each of 9 cases, for 90 timed passes per profile. Stages use CUDA events. Each pass is also timed by wall clock, and the two agree (see `wall_ms`). Every pass ends with the label map in host memory.
+- **Profiles:** the host path reads gzip and transforms on the CPU. The GPU path reads pre-decompressed `.nii` and transforms on the GPU. `{REFERENCE}` is true FP32 on the unmodified bundle weights and is the numerical reference. All other profiles use the BatchNorm-folded weights. `pytorch_tf32` is PyTorch's default and is not FP32. `{SHIPPING}` is the fast profile. `trt_fp16_nn` is kept only as a comparison.
+- **Profiling:** {nsight_line}
+
+## 4. Benchmark
+
+{matrix}
+
+![Stage latency breakdown](docs/figures/stage_breakdown.png)
+
+### Per-stage medians
+
+`ingest` is `load + h2d`. Quote it instead of `load` alone, because `mmap` defers the read into `h2d`.
+
+{stages}
+
+### Per-case latency, fast profile
+
+`{e2e(SHIPPING):.0f} ms` is a median across cases of different sizes: `{n_under_200}` of `{len(case_medians)}` cases have a median under 200 ms.
+
+{cases}
+
+## 5. Network-only comparison
+
+These runs use identical windows on every backend, in a sustained loop. Fast windows use `{windows_fast}` windows across the 9 cases against `{windows_bundle}` for bundle windows, so comparing a fast-window time to a bundle-window time measures less work, not a faster network.
+
+{network}
+
+Inside the real pipeline, TensorRT is `{rung_net('e_gpu_nii_tf32') / rung_net('f_gpu_nii_trt'):.2f}x` faster than TF32 at bundle windows and `{rung_net('g_fast_tf32') / rung_net('h_fast_trt'):.2f}x` at fast windows.
+
+### GPU clock state
+
+`sw_network` depends on what the GPU was doing just before, so values from different pipelines are not directly comparable. The same work takes longer after a 3 s idle gap, which is consistent with the laptop GPU lowering its clocks during long CPU stages. Sustained loops can also run slower than the short bursts inside the real pipeline, so the table above and the in-pipeline ratios both matter.
+
+{clock}
+
+## 6. Ingestion
+
+Warm OS page cache. `mmap` returns before reading, so only the right-hand column is a fair comparison. Nearly all of the gain comes from not decompressing gzip.
+
+{ingestion}
+
+Resampling runs on the GPU in `{probes['resample_dtype']['inverse'][0]['dtype'].replace('torch.', '')}`, which is MONAI's default and is slow on GeForce hardware. Only the final mask copy is `{probes['resample_dtype']['final_mask_dtype'].replace('torch.', '')}`.
+
+## 7. Amdahl analysis
+
+{amdahl}
+
+Once the network is a small share of end-to-end time, a faster network barely moves the total.
+
+## 8. Sliding-window sweep
+
+Uses the fast profile's own post-processing, with 5 timed passes per case on a hot GPU. {sweep_note} The cases are the evaluation cases, so this is selection on the evaluation set.
+
+{sweep_table}
+
+![Sliding-window sweep](docs/figures/pareto_sweep.png)
+
+## 9. Agreement with true FP32
+
+All rows compare with `{REFERENCE}` (mean Dice `{agreement['reference_mean_dice']:.6f}`). The sample is `{ship_vol['n']}` cases, so these limits of agreement are imprecise.
+
+{agree}
+
+{drift_line} Across all sliding windows TensorRT flipped `{fp16['window_voxels_background_to_foreground']}` window-voxels from background to foreground and `{fp16['window_voxels_foreground_to_background']}` the other way. The largest logit difference is `{fp16['max_abs_logit_diff']:.3f}` on logits up to `{fp16['reference_logit_abs_max']:.1f}`.
+
+{fold_section}
+
+### Per-case agreement, fast profile
+
+{per_case_agree}
+
+![Bland-Altman agreement](docs/figures/bland_altman.png)
+
+## 10. Error analysis
+
+These are observations about where errors fall, not explanations of why. FP16 is not the main source of error on these cases: the Dice change from FP32 is far smaller than the distance from a perfect score.
+
+{chr(10).join(failure_lines)}
+
+Across all `{cross['n']}` cases, Dice is not clearly related to slice thickness (Spearman `{cross['spearman_dice_vs_z_spacing']['rho']:+.2f}`, p = `{cross['spearman_dice_vs_z_spacing']['p']:.2f}`) or to spleen volume (Spearman `{cross['spearman_dice_vs_gt_volume']['rho']:+.2f}`, p = `{cross['spearman_dice_vs_gt_volume']['p']:.2f}`). The coarsest scan, `{cross['coarsest_z_case']}` at `{cross['coarsest_z_mm']:.1f} mm`, ranks number `{cross['coarsest_z_case_dice_rank']}` of `{cross['n']}` by Dice.
+
+![Lowest-Dice case](docs/figures/failure_case_1.png)
+![Second-lowest-Dice case](docs/figures/failure_case_2.png)
+
+## 11. Limitations
+
+- **Small sample:** 9 cases from one public dataset, which also selected the checkpoint.
+- **One machine:** one laptop GPU, whose clocks change with load and temperature. Expect different absolute numbers elsewhere.
+- **Best-case I/O:** the GPU path assumes volumes are already decompressed and in the OS page cache. Cold-disk reads and the one-time decompression are not included.
+- **Warm process:** model loading, engine deserialization, and CUDA start-up are excluded.
+- **Not a product path:** no DICOM ingestion, result saving, or concurrency is measured.
+- **Engine builds:** TensorRT selects kernels at build time, so a rebuilt engine can differ slightly.
+
+## 12. Reproduce
+
+Check that this README matches `results/`. No GPU or data needed:
+
+```bash
+python -m medtrt.verify_claims
+```
+
+Regenerate everything on an NVIDIA GPU. This downloads the dataset and bundle, and takes about an hour:
+
+```bash
+pip install -r requirements-lock.txt
+pip install -e .
+python -m medtrt.pipeline
+```
+
+Run the tests, or the viewer:
+
+```bash
+python -m pytest tests/
+streamlit run app/viewer.py
+```
+
+## 13. Data and licenses
+
+The dataset, weights, and engines are not in this repository. `Task09_Spleen` is from the [Medical Segmentation Decathlon](http://medicaldecathlon.com/) under CC-BY-SA 4.0, and the figures in `docs/figures/failure_case_*.png` are derived from it. The MONAI bundle is Apache-2.0.
+"""
+
+
+def write_state() -> None:
+    bench = _json(f"bench_{SHIPPING}.json")
+    agreement = _json("bland_altman.json")["profiles"][SHIPPING]["dice_vs_reference"]
+    state = {
+        "current_phase": "COMPLETE",
+        "run": bench["run"],
+        "fast_profile": SHIPPING,
+        "median_e2e_ms": bench["stage_latency_ms"]["e2e_total"]["median"],
+        "max_e2e_ms": bench["stage_latency_ms"]["e2e_total"]["max"],
+        "mean_dice": agreement["mean_dice"],
+    }
+    with open(RESULTS_DIR / "STATE.json", "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
 
 
 def generate_readme() -> Path:
-    """
-    Programmatically parse `results/*.json` and `results/*.csv` to build `medtrt/README.md`.
-    """
-    env = _load_json(RESULTS_DIR / "env.json")
-    heldout = _load_json(RESULTS_DIR / "heldout_cases.json")
-    trt_build = _load_json(RESULTS_DIR / "trt_build.json")
-    ba_data = _load_json(RESULTS_DIR / "bland_altman.json")
-    failures = _load_json(RESULTS_DIR / "failure_analysis.json")
-    nsys_sum = _load_json(RESULTS_DIR / "nsys_summary.json")
-    sweep_rows = _load_csv(RESULTS_DIR / "sweep.csv")
-    val_rows = _load_csv(RESULTS_DIR / "validation.csv")
-
-    bench_map: Dict[str, Dict[str, Any]] = {}
-    eval_map: Dict[str, Dict[str, Any]] = {}
-    for b_key, _ in BACKEND_ORDER:
-        b_json = _load_json(RESULTS_DIR / f"bench_{b_key}.json")
-        if b_json:
-            bench_map[b_key] = b_json
-        e_rows = _load_csv(RESULTS_DIR / f"eval_{b_key}.csv")
-        if e_rows:
-            dices = [float(r["dice"]) for r in e_rows]
-            eval_map[b_key] = {
-                "mean_dice": float(np.mean(dices)),
-                "std_dice": float(np.std(dices)),
-                "median_dice": float(np.median(dices)),
-                "rows": e_rows,
-            }
-
-    if bench_map:
-        generate_stage_breakdown_chart(bench_map)
-
-    # Extract baseline reference numbers (Default PyTorch FP32 and Strict FP32)
-    fp32_net = bench_map["pytorch_fp32"]["stage_latency_ms"]["sw_network"]["median"]
-    fp32_e2e = bench_map["pytorch_fp32"]["stage_latency_ms"]["e2e_total"]["median"]
-    strict_net = bench_map["pytorch_fp32_strict"]["stage_latency_ms"]["sw_network"]["median"]
-    strict_e2e = bench_map["pytorch_fp32_strict"]["stage_latency_ms"]["e2e_total"]["median"]
-    trt_net = bench_map["trt_fp16"]["stage_latency_ms"]["sw_network"]["median"]
-    trt_e2e = bench_map["trt_fp16"]["stage_latency_ms"]["e2e_total"]["median"]
-    opt_net = bench_map["trt_fp16_optimized"]["stage_latency_ms"]["sw_network"]["median"]
-    opt_e2e = bench_map["trt_fp16_optimized"]["stage_latency_ms"]["e2e_total"]["median"]
-    opt_post = bench_map["trt_fp16_optimized"]["stage_latency_ms"]["postprocess"]["median"]
-    trt_post = bench_map["trt_fp16"]["stage_latency_ms"]["postprocess"]["median"]
-    opt_load = bench_map["trt_fp16_optimized"]["stage_latency_ms"]["load"]["median"]
-    trt_load = bench_map["trt_fp16"]["stage_latency_ms"]["load"]["median"]
-    io_comp = bench_map["trt_fp16_optimized"].get("io_comparison_ms", {})
-    io_gz_med = io_comp.get("gzip_on_the_fly_ms", {}).get("median", trt_load)
-    io_gz_iqr = io_comp.get("gzip_on_the_fly_ms", {}).get("iqr", 0.0)
-    io_mmap_med = io_comp.get("uncompressed_mmap_ms", {}).get("median", opt_load)
-    io_mmap_iqr = io_comp.get("uncompressed_mmap_ms", {}).get("iqr", 0.0)
-    io_speedup = io_comp.get("io_speedup_factor", trt_load / max(opt_load, 1e-6))
-
-    net_speedup_vs_fp32 = fp32_net / max(trt_net, 1e-6)
-    net_speedup_vs_strict = strict_net / max(trt_net, 1e-6)
-    opt_net_speedup_vs_fp32 = fp32_net / max(opt_net, 1e-6)
-    opt_net_speedup_vs_strict = strict_net / max(opt_net, 1e-6)
-    e2e_speedup_opt_vs_fp32 = fp32_e2e / max(opt_e2e, 1e-6)
-    post_speedup = trt_post / max(opt_post, 1e-6)
-
-    # Build 5-Backend Summary Table
-    bench_table_lines = [
-        "| Backend & Precision | Patch `B=1` Median (ms) | Patch `B=4` Median (ms) | Volume `sw_network` Median [IQR] (ms) | Volume `e2e_total` Median [IQR] (ms) | Peak VRAM (MB) | Held-Out Mean Dice (± SD) | Network Speedup (vs FP32 / Strict) | E2E Speedup (vs FP32) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ]
-    for b_key, b_label in BACKEND_ORDER:
-        b = bench_map[b_key]
-        ev = eval_map[b_key]
-        p_b1 = b["patch_forward_latency_ms"]["batch_1"]["median"]
-        p_b4 = b["patch_forward_latency_ms"]["batch_4"]["median"]
-        sw_med = b["stage_latency_ms"]["sw_network"]["median"]
-        sw_iqr = b["stage_latency_ms"]["sw_network"]["iqr"]
-        e2e_med = b["stage_latency_ms"]["e2e_total"]["median"]
-        e2e_iqr = b["stage_latency_ms"]["e2e_total"]["iqr"]
-        vram_max = b["peak_vram_mb"]["max"]
-        m_dice = ev["mean_dice"]
-        s_dice = ev["std_dice"]
-        sp_net_fp32 = fp32_net / max(sw_med, 1e-6)
-        sp_net_strict = strict_net / max(sw_med, 1e-6)
-        sp_e2e = fp32_e2e / max(e2e_med, 1e-6)
-        bench_table_lines.append(
-            f"| **{b_label}** (`{b_key}`) | `{p_b1:.2f} ms` | `{p_b4:.2f} ms` | "
-            f"`{sw_med:.2f} [{sw_iqr:.2f}] ms` | `{e2e_med:.2f} [{e2e_iqr:.2f}] ms` | "
-            f"`{vram_max:.1f} MB` | `{m_dice:.6f} ± {s_dice:.6f}` | "
-            f"`{sp_net_fp32:.2f}x` / `{sp_net_strict:.2f}x` | **`{sp_e2e:.2f}x`** |"
-        )
-
-    # Build Stage Decomposition Table
-    stage_table_lines = [
-        "| Pipeline Stage (NVTX Range) | `pytorch_fp32_strict` (ms) | `pytorch_fp32` (ms) | `pytorch_amp` (ms) | `trt_fp16` (ms) | `trt_fp16_optimized` (ms) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: |",
-    ]
-    for stg in ("load", "preprocess", "h2d", "sw_network", "sw_aggregate", "postprocess", "non_network", "e2e_total"):
-        row_cells = []
-        for b_key, _ in BACKEND_ORDER:
-            st_obj = bench_map[b_key]["stage_latency_ms"][stg]
-            row_cells.append(f"`{st_obj['median']:.2f} [{st_obj['iqr']:.2f}]`")
-        stage_table_lines.append(f"| **`{stg}`** | " + " | ".join(row_cells) + " |")
-
-    # Build Sweep Table
-    sweep_table_lines = [
-        "| Overlap | `sw_batch_size` | Median Sliding-Window Latency (ms) | IQR (ms) | Mean Sliding-Window Latency (ms) | Peak VRAM (MB) | Held-Out Mean Dice |",
-        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ]
-    for sr in sweep_rows:
-        sweep_table_lines.append(
-            f"| `{float(sr['overlap']):.2f}` | `{sr['sw_batch_size']}` | `{float(sr['median_sw_latency_ms']):.2f} ms` | "
-            f"`{float(sr['iqr_sw_latency_ms']):.2f} ms` | `{float(sr['mean_sw_latency_ms']):.2f} ms` | "
-            f"`{float(sr['peak_vram_mb']):.1f} MB` | `{float(sr['mean_dice']):.6f}` |"
-        )
-
-    # Build Per-Case Validation Table
-    val_table_lines = [
-        "| Case ID | $V_{\\text{GT}}$ ($\\text{cm}^3$) | $V_{\\text{FP32}}$ ($\\text{cm}^3$) | $V_{\\text{TRT\\_FP16}}$ ($\\text{cm}^3$) | $\\Delta V_{\\text{TRT - FP32}}$ ($\\text{cm}^3$) | $\\text{Dice}_{\\text{FP32}}$ | $\\text{Dice}_{\\text{TRT\\_FP16}}$ | $\\Delta\\text{Dice}_{\\text{TRT - FP32}}$ |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ]
-    for vr in val_rows:
-        val_table_lines.append(
-            f"| `{vr['case_id']}` | `{float(vr['v_gt_cm3']):.2f}` | `{float(vr['v_fp32_cm3']):.2f}` | "
-            f"`{float(vr['v_trt_fp16_cm3']):.2f}` | `{float(vr['delta_v_trt_vs_fp32_cm3']):+.4f}` | "
-            f"`{float(vr['dice_fp32']):.6f}` | `{float(vr['dice_trt_fp16']):.6f}` | `{float(vr['delta_dice_trt_vs_fp32']):+.6f}` |"
-        )
-
-    ba_trt_gt = ba_data["bland_altman_trt_fp16_vs_gt"]
-    ba_fp32_gt = ba_data["bland_altman_pytorch_fp32_vs_gt"]
-    ba_trt_fp32 = ba_data["bland_altman_trt_fp16_vs_pytorch_fp32"]
-    eq_data = ba_data["equivalence"]
-
-    amdahl_fp32 = bench_map["pytorch_fp32"]["amdahl"]
-    amdahl_trt = bench_map["trt_fp16"]["amdahl"]
-    amdahl_opt = bench_map["trt_fp16_optimized"]["amdahl"]
-
-    w1, w2 = failures["worst_cases"][0], failures["worst_cases"][1]
-
-    readme_md = f"""# MedTRT: GPU-Accelerated 3D CT Segmentation, Profiled and Validated
-
-> ⚠️ **Scope Boundary & Intended Use Disclaimer:** This repository is a **systems profiling and numerical validation research study** equipped with a minimal tri-planar workstation. It is **NOT** a clinical medical device and makes **NO** automated diagnostic or triage claims. All metrics below are programmatically generated from `results/*.json` and `results/*.csv`.
-
----
-
-## 1. Headline Measured Results (`NVIDIA GeForce RTX 5080 Laptop GPU`, Blackwell `sm_120`)
-
-- **Zero-Copy TensorRT 10.x FP16 Network Acceleration:** Reduces median per-volume 3D UNet forward latency (`sw_network`) from **`{strict_net:.2f} ms`** (Strict IEEE FP32) and **`{fp32_net:.2f} ms`** (Default TF32) down to **`{trt_net:.2f} ms`** at `overlap=0.5, sw_batch_size=4` (**`{net_speedup_vs_strict:.2f}x`** / **`{net_speedup_vs_fp32:.2f}x`** speedup), and further down to **`{opt_net:.2f} ms`** under the Pareto sliding-window profile (`overlap=0.25, sw_batch_size=8`, **`{opt_net_speedup_vs_strict:.2f}x`** vs. Strict FP32 / **`{opt_net_speedup_vs_fp32:.2f}x`** vs. Default TF32).
-- **Stage 2 End-to-End Bottleneck Elimination (`trt_fp16_optimized` < 500 ms):** Stage-boundary NVTX + CUDA Event profiling revealed that host-bound postprocessing (`Invertd` 3D trilinear spatial resampling on CPU: **`{trt_post:.2f} ms`**) and on-the-fly gzip NIfTI decompression (`load`: **`{trt_load:.2f} ms`**) consumed **`{amdahl_trt['non_network_fraction_s']*100:.2f}%`** of unoptimized end-to-end execution time, capping theoretical E2E speedup at **`{amdahl_trt['theoretical_max_e2e_speedup_1_over_s']:.2f}x`**. Implementing (1) `torch.uint8` CUDA nearest-neighbor `Invertd` postprocessing, (2) Pareto sliding-window execution (`overlap=0.25, sw_batch_size=8`), and (3) memory-mapped uncompressed NIfTI ingestion (`nibabel.load(..., mmap=True)`) slashed `postprocess` latency from **`{trt_post:.2f} ms` $\\to$ `{opt_post:.2f} ms` (`{post_speedup:.1f}x` faster)**, cut `load` latency from **`{io_gz_med:.2f} ms` $\\to$ `{opt_load:.2f} ms` (`{io_speedup:.1f}x` faster)**, and dropped full-volume end-to-end latency (`e2e_total`) from **`{fp32_e2e:.2f} ms` $\\to$ `{opt_e2e:.2f} ms` (`{e2e_speedup_opt_vs_fp32:.2f}x` E2E speedup)** while preserving **`{eval_map['trt_fp16_optimized']['mean_dice']:.6f}`** Held-Out Mean Dice.
-- **Diagnostic & Volumetric Equivalence:** Across the 9 deterministic held-out MSD `Task09_Spleen` validation volumes, mean foreground Dice is **`{eval_map['trt_fp16']['mean_dice']:.6f}`** (TensorRT FP16) vs. **`{eval_map['pytorch_fp32']['mean_dice']:.6f}`** (PyTorch FP32), yielding a mean absolute Dice drift of **`{eq_data['mean_abs_delta_dice_trt_vs_fp32']:.6f} < 0.005`** and cross-backend Bland-Altman volumetric bias of **`{ba_trt_fp32['bias_cm3']:+.4f} cm³`** (`95% LoA: [{ba_trt_fp32['loa_lower_cm3']:+.4f}, {ba_trt_fp32['loa_upper_cm3']:+.4f}] cm³`).
-
----
-
-## 2. Pipeline Architecture
-
-```mermaid
-flowchart LR
-    subgraph Host_IO["Stage 1: Host Disk I/O (NVTX: load)"]
-        A["NIfTI CT Volume (*.nii.gz)<br/>LoadImaged + EnsureChannelFirstd"]
-    end
-
-    subgraph Preproc["Stages 2-3: Spatial & HU Preprocessing (NVTX: preprocess / h2d)"]
-        B["Orientationd(RAS)<br/>Spacingd(1.5, 1.5, 2.0 mm, bilinear)<br/>ScaleIntensityRanged(-57..164 HU → 0..1)<br/>(CPU in baseline / CUDA in trt_fp16_optimized)"]
-    end
-
-    subgraph SlidingWindow["Stages 4-5: 3D Sliding-Window Inference (NVTX: sw_network & sw_aggregate)"]
-        C["MONAI SlidingWindowInferer<br/>ROI=(96,96,96), sw_batch_size=4, overlap=0.5"]
-        D["Zero-Copy TRTRunner (TensorRT 10.16 FP16)<br/>context.set_tensor_address(tensor.data_ptr())<br/>context.execute_async_v3(cuda_stream)"]
-        C <--> D
-    end
-
-    subgraph Postproc["Stage 6: Inverse Transform & Volumetry (NVTX: postprocess)"]
-        E["Activationsd(Softmax) → Invertd(Native Affine)<br/>→ AsDiscreted(Argmax)<br/>(CUDA grid_sample in trt_fp16_optimized)"]
-        F["Clinical Volumetry & Bland-Altman Audit<br/>V = (N × sx × sy × sz) / 1000 cm³"]
-        E --> F
-    end
-
-    A --> B --> C
-    D --> E
-```
-
----
-
-## 3. Verified Hardware & Toolchain Specifications (from `results/env.json`)
-
-| Parameter | Verified Runtime Value |
-| :--- | :--- |
-| **GPU Model & Architecture** | `{env.get('gpu_model')}` (`{env.get('architecture')}`, Compute Capability `{env.get('compute_capability')}`) |
-| **Total GPU VRAM** | `{env.get('vram_gb')} GB` (`{env.get('vram_mb')} MB`) |
-| **NVIDIA Driver / CUDA Runtime / cuDNN** | Driver `{env.get('driver_version')}` · CUDA `{env.get('cuda_runtime_version')}` · cuDNN `{env.get('cudnn_version')}` |
-| **PyTorch / MONAI / TensorRT Versions** | PyTorch `{env.get('pytorch_version')}` · MONAI `{env.get('monai_version')}` · TensorRT `{env.get('tensorrt_version')}` |
-| **OS & Python Runtime** | `{env.get('os')}` · CPython `{env.get('python_version')}` |
-| **ONNX Export & TRT Engine Build** | `opset_version={trt_build.get('onnx', {}).get('opset_version', 17)}` · Max Abs Diff `{trt_build.get('onnx', {}).get('max_abs_diff_vs_pytorch_fp32', 0.0):.3e}` · Build Time `{trt_build.get('build_duration_s', 0.0):.2f} s` (`{trt_build.get('engine_size_mb', 0.0):.2f} MB`) |
-
----
-
-## 4. Benchmark Matrix & Stage Decomposition (`9 Held-Out Cases × 10 Timed Repeats = 90 Passes`)
-
-### 4.1 End-to-End & Network Performance Across All 5 Backends
-{chr(10).join(bench_table_lines)}
-
-### 4.2 Per-Stage Median [IQR] Latency Breakdown (ms)
-{chr(10).join(stage_table_lines)}
-
-![Stage Latency Breakdown](docs/figures/stage_breakdown.png)
-
----
-
-## 5. Amdahl's Law Analysis, Nsight Trace & Targeted Optimization
-
-### 5.1 Amdahl's Law Ceiling Before vs. After GPU Transform Offload
-Let $p = T_{{\\text{{sw\\_network}}}} / T_{{\\text{{e2e}}}}$ denote the fraction of end-to-end time spent in 3D UNet patch forward execution and $s = 1 - p$ denote the non-network fraction:
-
-| Pipeline Variant | Median `sw_network` ($\\text{{ms}}$) | Median `non_network` ($\\text{{ms}}$) | Median `e2e_total` ($\\text{{ms}}$) | Network Fraction ($p$) | Non-Network Fraction ($s$) | Theoretical Max E2E Speedup ($1/s$) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`pytorch_fp32`** | `{amdahl_fp32['median_sw_network_ms']:.2f} ms` | `{amdahl_fp32['median_non_network_ms']:.2f} ms` | `{amdahl_fp32['median_e2e_ms']:.2f} ms` | `{amdahl_fp32['network_fraction_p']*100:.2f}%` | `{amdahl_fp32['non_network_fraction_s']*100:.2f}%` | `{amdahl_fp32['theoretical_max_e2e_speedup_1_over_s']:.2f}x` |
-| **`trt_fp16` (Unoptimized Host Transforms)** | `{amdahl_trt['median_sw_network_ms']:.2f} ms` | `{amdahl_trt['median_non_network_ms']:.2f} ms` | `{amdahl_trt['median_e2e_ms']:.2f} ms` | `{amdahl_trt['network_fraction_p']*100:.2f}%` | `{amdahl_trt['non_network_fraction_s']*100:.2f}%` | `{amdahl_trt['theoretical_max_e2e_speedup_1_over_s']:.2f}x` |
-| **`trt_fp16_optimized` (GPU Resample + GPU Invertd)** | `{amdahl_opt['median_sw_network_ms']:.2f} ms` | `{amdahl_opt['median_non_network_ms']:.2f} ms` | `{amdahl_opt['median_e2e_ms']:.2f} ms` | `{amdahl_opt['network_fraction_p']*100:.2f}%` | `{amdahl_opt['non_network_fraction_s']*100:.2f}%` | `{amdahl_opt['theoretical_max_e2e_speedup_1_over_s']:.2f}x` |
-
-### 5.2 Nsight / NVTX Timeline Interpretation (`results/nsys_summary.json`)
-![Nsight / NVTX Timeline](docs/figures/nsys_trace.png)
-
-- **Bottleneck Attribution:** In the unoptimized `trt_fp16` pipeline (`spleen_6`, `512×512×135`), all `{nsys_sum['repeats'][-1]['num_patch_batches']}` sliding-window batches complete on CUDA Stream 0 in just **`{nsys_sum['repeats'][-1]['sw_network_ms']:.2f} ms`** total (`sw_aggregate` stitch overhead **`{nsys_sum['repeats'][-1]['sw_aggregate_ms']:.2f} ms`**), whereas copying the 2-channel resampled logits to CPU for `Invertd` trilinear interpolation stalls the pipeline for **`{nsys_sum['repeats'][-1]['postprocess_ms']:.2f} ms`**.
-- **Stage 2 Optimizations (`trt_fp16_optimized`):**
-  1. **GPU `torch.uint8` Nearest-Neighbor Postprocessing (`src/medtrt/infer.py`):** Converts `AsDiscreted(argmax=True)` output to `torch.uint8` on `cuda:0` prior to `Invertd(nearest_interp=True, device="cuda:0")`, cutting `postprocess` median latency from **`{trt_post:.2f} ms` $\\to$ `{opt_post:.2f} ms` (`{post_speedup:.1f}x` speedup)**.
-  2. **Pareto Sliding-Window Profile (`overlap=0.25, sw_batch_size=8`):** Drops median `sw_network` latency from **`{trt_net:.2f} ms` $\\to$ `{opt_net:.2f} ms`** while preserving **`{eval_map['trt_fp16_optimized']['mean_dice']:.6f}`** Held-Out Mean Dice (`>= 0.960`).
-  3. **Memory-Mapped Uncompressed NIfTI Ingestion (`src/medtrt/data.py` & `src/medtrt/bench.py`):** Isolates gzip CPU decompression overhead via one-time `.nii` extraction and `nibabel.load(..., mmap=True)`. Across all 9 held-out volumes:
-
-| Ingestion Path | Reader Configuration | Median Load Latency [IQR] (ms) | I/O Speedup |
-| :--- | :--- | :---: | :---: |
-| **With On-the-Fly Gzip Decompression** | `LoadImaged` on `.nii.gz` | `{io_gz_med:.2f} [{io_gz_iqr:.2f}] ms` | `1.00x` |
-| **Without Gzip Decompression (Memory-Mapped)** | `nibabel.load(..., mmap=True)` on `.nii` | **`{io_mmap_med:.2f} [{io_mmap_iqr:.2f}] ms`** | **`{io_speedup:.2f}x`** |
-
-  - Combined, total end-to-end volume latency (`e2e_total`) dropped from **`{fp32_e2e:.2f} ms` (`pytorch_fp32`) / `{trt_e2e:.2f} ms` (`trt_fp16`) $\\to$ `{opt_e2e:.2f} ms` (`{e2e_speedup_opt_vs_fp32:.2f}x` overall E2E speedup, well below the `< 500 ms` target)**.
-
-### 5.3 Sliding-Window Parameter Grid Sweep (`results/sweep.csv`)
-{chr(10).join(sweep_table_lines)}
-
-![Pareto Sweep](docs/figures/pareto_sweep.png)
-
----
-
-## 6. Clinical Measurement Validation (`results/validation.csv` & `results/bland_altman.json`)
-
-### 6.1 Per-Case Volumetric & Dice Equivalence (`PyTorch FP32` vs. `TensorRT 10.x FP16`)
-{chr(10).join(val_table_lines)}
-
-### 6.2 Bland-Altman Summary Statistics
-| Comparison Pair | Mean Bias ($\\text{{cm}}^3$) | Sample SD ($\\text{{cm}}^3$) | 95% LoA Lower ($\\text{{cm}}^3$) | 95% LoA Upper ($\\text{{cm}}^3$) | MAE ($\\text{{cm}}^3$) | Max $|\\Delta V|$ ($\\text{{cm}}^3$) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **TensorRT FP16 vs. Ground Truth** | `{ba_trt_gt['bias_cm3']:+.4f}` | `{ba_trt_gt['sd_cm3']:.4f}` | `{ba_trt_gt['loa_lower_cm3']:+.4f}` | `{ba_trt_gt['loa_upper_cm3']:+.4f}` | `{ba_trt_gt['mae_cm3']:.4f}` | `{ba_trt_gt['max_abs_diff_cm3']:.4f}` |
-| **PyTorch FP32 vs. Ground Truth** | `{ba_fp32_gt['bias_cm3']:+.4f}` | `{ba_fp32_gt['sd_cm3']:.4f}` | `{ba_fp32_gt['loa_lower_cm3']:+.4f}` | `{ba_fp32_gt['loa_upper_cm3']:+.4f}` | `{ba_fp32_gt['mae_cm3']:.4f}` | `{ba_fp32_gt['max_abs_diff_cm3']:.4f}` |
-| **Cross-Backend (`TRT FP16 - PyTorch FP32`)** | **`{ba_trt_fp32['bias_cm3']:+.4f}`** | **`{ba_trt_fp32['sd_cm3']:.4f}`** | **`{ba_trt_fp32['loa_lower_cm3']:+.4f}`** | **`{ba_trt_fp32['loa_upper_cm3']:+.4f}`** | **`{ba_trt_fp32['mae_cm3']:.4f}`** | **`{ba_trt_fp32['max_abs_diff_cm3']:.4f}`** |
-
-- **Mean $|\\Delta\\text{{Dice}}|$ (`TRT FP16` vs. `PyTorch FP32`):** `{eq_data['mean_abs_delta_dice_trt_vs_fp32']:.6f}` (Max: `{eq_data['max_abs_delta_dice_trt_vs_fp32']:.6f}`, Acceptance Criterion: `< 0.005` — **PASS**).
-
-![Bland-Altman Agreement](docs/figures/bland_altman.png)
-
-### 6.3 Case Failure Analysis (`results/failure_analysis.json`)
-1. **Worst Case #1 — `{w1['case_id']}` (Dice = `{w1['dice_trt_fp16']:.4f}`, $V_{{\\text{{pred}}}} = {w1['v_trt_fp16_cm3']:.2f}\\text{{ cm}}^3$, $V_{{\\text{{gt}}}} = {w1['v_gt_cm3']:.2f}\\text{{ cm}}^3$, Spacing `{w1['voxel_spacing_mm']}` mm):**
-   - *Attribution:* {w1['engineering_attribution']}
-   ![Failure Case 1](docs/figures/failure_case_1.png)
-2. **Worst Case #2 — `{w2['case_id']}` (Dice = `{w2['dice_trt_fp16']:.4f}`, $V_{{\\text{{pred}}}} = {w2['v_trt_fp16_cm3']:.2f}\\text{{ cm}}^3$, $V_{{\\text{{gt}}}} = {w2['v_gt_cm3']:.2f}\\text{{ cm}}^3$, Spacing `{w2['voxel_spacing_mm']}` mm):**
-   - *Attribution:* {w2['engineering_attribution']}
-   ![Failure Case 2](docs/figures/failure_case_2.png)
-
----
-
-## 7. Reproducibility & Quickstart (`make all`)
-
-```bash
-# Full end-to-end audit, dataset setup, engine compilation, benchmarking, validation & report generation
-make all
-
-# Run automated pytest verification suite
-make test
-
-# Launch interactive tri-planar Streamlit workstation on port 8501
-make app
-```
-"""
-
+    generate_stage_breakdown_chart({k: _json(f"bench_{k}.json") for k in PROFILES})
     readme_path = MEDTRT_ROOT / "README.md"
-    with open(readme_path, "w", encoding="utf-8") as f:
-        f.write(readme_md)
-
-    print(f"[PASS] Generated programmatic README.md at {readme_path}")
+    with open(readme_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(render_readme())
+    write_state()
+    print(f"[PASS] Generated {readme_path.name}")
     return readme_path
 
 

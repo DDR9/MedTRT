@@ -1,27 +1,22 @@
-PYTHON ?= ../medical-ai/.venv/Scripts/python.exe
-PYTHONPATH := src
+PYTHON ?= python
+export PYTHONPATH := src
 
-.PHONY: env data bench eval report app test all
+.PHONY: all smoke verify test report app
 
-env:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m medtrt.config --env-audit
+all:
+	$(PYTHON) -m medtrt.pipeline
 
-data:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m medtrt.data
+smoke:
+	$(PYTHON) -m medtrt.pipeline --smoke
 
-bench:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m medtrt.bench --backend $(BACKEND)
-
-eval:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m medtrt.evaluate --backend $(BACKEND)
-
-report:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m medtrt.report
-
-app:
-	PYTHONPATH=$(PYTHONPATH) ../medical-ai/.venv/Scripts/streamlit.exe run app/viewer.py --server.port 8501
+verify:
+	$(PYTHON) -m medtrt.verify_claims
 
 test:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest tests/
+	$(PYTHON) -m pytest tests/
 
-all: env data bench eval report
+report:
+	$(PYTHON) -m medtrt.report
+
+app:
+	$(PYTHON) -m streamlit run app/viewer.py --server.port 8501
