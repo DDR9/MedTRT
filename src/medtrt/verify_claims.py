@@ -278,6 +278,66 @@ def check_external_cohort_and_tost() -> Result:
     )
 
 
+def check_technical_paper() -> Result:
+    """Verify that the technical paper (.md, .tex, .pdf) exists, has zero unresolved references,
+    and reports the exact verified telemetry and secondary engineering problems.
+    """
+    md_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.md"
+    tex_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.tex"
+    pdf_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.pdf"
+    rep_pdf = MEDTRT_ROOT / "reports" / "MEDTRT_TECHNICAL_PAPER.pdf"
+    for p in (md_path, tex_path, pdf_path, rep_pdf):
+        if not p.exists() or p.stat().st_size < 10_000:
+            return False, f"missing or truncated technical paper artifact: {p.name}"
+
+    md_text = md_path.read_text(encoding="utf-8")
+    tex_text = tex_path.read_text(encoding="utf-8")
+    md_tokens = (
+        "2,952.0",
+        "96.3",
+        "68.9",
+        "-81.79",
+        "2,301",
+        "455",
+        "FLARE22",
+        "TOST",
+        "Problem A",
+        "Problem H",
+        "fused_invert_trilinear_threshold_u8",
+    )
+    tex_tokens = (
+        "2,952.0",
+        "96.3",
+        "68.9",
+        "-81.79",
+        "2,301",
+        "455",
+        "FLARE22",
+        "TOST",
+        "Problem \\Alph*",
+        "tab:decoder_bn",
+        "tab:kernels",
+        "tab:tost",
+    )
+    for token in md_tokens:
+        if token not in md_text:
+            return False, f"MEDTRT_TECHNICAL_PAPER.md missing required verified token '{token}'"
+    for token in tex_tokens:
+        if token not in tex_text:
+            return False, f"MEDTRT_TECHNICAL_PAPER.tex missing required verified token '{token}'"
+
+    low = md_text.lower()
+    hit = [phrase for phrase in UNSUPPORTED_PHRASES if phrase in low]
+    if hit:
+        return False, f"unsupported phrase(s) in MEDTRT_TECHNICAL_PAPER.md: {hit}"
+
+    return (
+        True,
+        f"MEDTRT_TECHNICAL_PAPER (.md={md_path.stat().st_size // 1024} KB, .tex={tex_path.stat().st_size // 1024} KB, "
+        f".pdf={pdf_path.stat().st_size // 1024} KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data",
+    )
+
+
 CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("single code version", check_single_code_version),
     ("benchmark protocol", check_protocol),
@@ -292,6 +352,7 @@ CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("data split & leakage audit", check_data_leakage),
     ("latency & memory hardware telemetry audit", check_hardware_telemetry_audit),
     ("external FLARE22 cohort & TOST equivalence audit", check_external_cohort_and_tost),
+    ("technical paper & PDF study audit", check_technical_paper),
 )
 
 

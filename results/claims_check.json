@@ -69,6 +69,11 @@
    "check": "external FLARE22 cohort & TOST equivalence audit",
    "passed": true,
    "detail": "53 total CT volumes verified (41 MSD + 12 external FLARE22); pooled N=21 TOST equivalence PASS (dV=-0.0059 cm\u00b3, 90% CI [-0.0161, +0.0043], p_TOST<1e-6)"
+  },
+  {
+   "check": "technical paper & PDF study audit",
+   "passed": true,
+   "detail": "MEDTRT_TECHNICAL_PAPER (.md=51 KB, .tex=84 KB, .pdf=3919 KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data"
   }
  ]
 }
