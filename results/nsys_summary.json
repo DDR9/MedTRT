@@ -1,6 +1,13 @@
 {
-  "timestamp": "2026-11-05T09:40:52.996301+00:00",
-  "nsys_executable": null,
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "timestamp": "2026-11-06T04:44:47.208551+00:00",
+  "source": "torch.cuda.Event stage boundaries + NVTX instrumentation",
+  "nsys_executable_found": false,
   "nsys_cli_executed": false,
   "nsys_rep_path": null,
   "trace_figure_path": "docs/figures/nsys_trace.png",
@@ -9,317 +16,116 @@
     {
       "repeat": 0,
       "case_id": "spleen_6",
-      "load_ms": 2159.871,
-      "preprocess_ms": 432.89,
-      "h2d_ms": 3.9,
-      "sw_total_ms": 55.206,
-      "sw_network_ms": 48.626,
-      "sw_aggregate_ms": 6.58,
-      "postprocess_ms": 5204.42,
-      "e2e_total_ms": 7856.286,
-      "num_patch_batches": 18,
-      "patch_spans": [
-        {
-          "start_ms": 2597.742,
-          "end_ms": 2600.477,
-          "duration_ms": 2.735
-        },
-        {
-          "start_ms": 2601.847,
-          "end_ms": 2604.352,
-          "duration_ms": 2.505
-        },
-        {
-          "start_ms": 2604.552,
-          "end_ms": 2606.861,
-          "duration_ms": 2.308
-        },
-        {
-          "start_ms": 2607.057,
-          "end_ms": 2609.386,
-          "duration_ms": 2.329
-        },
-        {
-          "start_ms": 2609.584,
-          "end_ms": 2612.188,
-          "duration_ms": 2.605
-        },
-        {
-          "start_ms": 2612.41,
-          "end_ms": 2615.153,
-          "duration_ms": 2.743
-        },
-        {
-          "start_ms": 2615.374,
-          "end_ms": 2618.128,
-          "duration_ms": 2.754
-        },
-        {
-          "start_ms": 2618.352,
-          "end_ms": 2621.105,
-          "duration_ms": 2.754
-        },
-        {
-          "start_ms": 2621.331,
-          "end_ms": 2624.068,
-          "duration_ms": 2.737
-        },
-        {
-          "start_ms": 2624.285,
-          "end_ms": 2627.037,
-          "duration_ms": 2.753
-        },
-        {
-          "start_ms": 2627.271,
-          "end_ms": 2630.027,
-          "duration_ms": 2.756
-        },
-        {
-          "start_ms": 2630.248,
-          "end_ms": 2632.99,
-          "duration_ms": 2.743
-        },
-        {
-          "start_ms": 2633.209,
-          "end_ms": 2635.957,
-          "duration_ms": 2.749
-        },
-        {
-          "start_ms": 2636.18,
-          "end_ms": 2638.943,
-          "duration_ms": 2.762
-        },
-        {
-          "start_ms": 2639.163,
-          "end_ms": 2641.898,
-          "duration_ms": 2.734
-        },
-        {
-          "start_ms": 2642.115,
-          "end_ms": 2644.949,
-          "duration_ms": 2.834
-        },
-        {
-          "start_ms": 2645.183,
-          "end_ms": 2648.14,
-          "duration_ms": 2.958
-        },
-        {
-          "start_ms": 2648.369,
-          "end_ms": 2651.236,
-          "duration_ms": 2.867
-        }
-      ]
+      "load_ms": 1189.308,
+      "preprocess_ms": 363.968,
+      "h2d_ms": 3.544,
+      "sw_total_ms": 56.587,
+      "sw_network_ms": 49.821,
+      "sw_aggregate_ms": 6.767,
+      "postprocess_ms": 4827.128,
+      "e2e_total_ms": 6441.225,
+      "peak_vram_mb": 247.82,
+      "num_patch_batches": 18
     },
     {
       "repeat": 1,
       "case_id": "spleen_6",
-      "load_ms": 2112.887,
-      "preprocess_ms": 432.03,
-      "h2d_ms": 29.331,
-      "sw_total_ms": 291.256,
-      "sw_network_ms": 245.085,
-      "sw_aggregate_ms": 46.171,
-      "postprocess_ms": 6121.856,
-      "e2e_total_ms": 8987.36,
-      "num_patch_batches": 18,
-      "patch_spans": [
-        {
-          "start_ms": 2576.117,
-          "end_ms": 2600.51,
-          "duration_ms": 24.394
-        },
-        {
-          "start_ms": 2617.315,
-          "end_ms": 2642.109,
-          "duration_ms": 24.794
-        },
-        {
-          "start_ms": 2645.379,
-          "end_ms": 2670.206,
-          "duration_ms": 24.826
-        },
-        {
-          "start_ms": 2673.234,
-          "end_ms": 2698.087,
-          "duration_ms": 24.853
-        },
-        {
-          "start_ms": 2701.38,
-          "end_ms": 2726.216,
-          "duration_ms": 24.837
-        },
-        {
-          "start_ms": 2729.419,
-          "end_ms": 2754.302,
-          "duration_ms": 24.884
-        },
-        {
-          "start_ms": 2757.346,
-          "end_ms": 2782.309,
-          "duration_ms": 24.963
-        },
-        {
-          "start_ms": 2785.623,
-          "end_ms": 2810.606,
-          "duration_ms": 24.983
-        },
-        {
-          "start_ms": 2813.885,
-          "end_ms": 2838.946,
-          "duration_ms": 25.061
-        },
-        {
-          "start_ms": 2841.788,
-          "end_ms": 2844.205,
-          "duration_ms": 2.417
-        },
-        {
-          "start_ms": 2844.401,
-          "end_ms": 2846.904,
-          "duration_ms": 2.502
-        },
-        {
-          "start_ms": 2847.095,
-          "end_ms": 2849.372,
-          "duration_ms": 2.277
-        },
-        {
-          "start_ms": 2849.56,
-          "end_ms": 2851.791,
-          "duration_ms": 2.23
-        },
-        {
-          "start_ms": 2851.987,
-          "end_ms": 2854.225,
-          "duration_ms": 2.238
-        },
-        {
-          "start_ms": 2854.459,
-          "end_ms": 2857.002,
-          "duration_ms": 2.543
-        },
-        {
-          "start_ms": 2857.206,
-          "end_ms": 2859.616,
-          "duration_ms": 2.411
-        },
-        {
-          "start_ms": 2859.819,
-          "end_ms": 2862.285,
-          "duration_ms": 2.466
-        },
-        {
-          "start_ms": 2862.49,
-          "end_ms": 2864.896,
-          "duration_ms": 2.406
-        }
-      ]
+      "load_ms": 1285.791,
+      "preprocess_ms": 294.58,
+      "h2d_ms": 29.172,
+      "sw_total_ms": 243.885,
+      "sw_network_ms": 203.404,
+      "sw_aggregate_ms": 40.481,
+      "postprocess_ms": 4531.683,
+      "e2e_total_ms": 6385.88,
+      "peak_vram_mb": 247.82,
+      "num_patch_batches": 18
     },
     {
       "repeat": 2,
       "case_id": "spleen_6",
-      "load_ms": 1814.059,
-      "preprocess_ms": 417.004,
-      "h2d_ms": 29.214,
-      "sw_total_ms": 241.839,
-      "sw_network_ms": 200.062,
-      "sw_aggregate_ms": 41.777,
-      "postprocess_ms": 5831.121,
-      "e2e_total_ms": 8333.236,
-      "num_patch_batches": 18,
-      "patch_spans": [
-        {
-          "start_ms": 2264.872,
-          "end_ms": 2289.457,
-          "duration_ms": 24.585
-        },
-        {
-          "start_ms": 2306.182,
-          "end_ms": 2331.329,
-          "duration_ms": 25.147
-        },
-        {
-          "start_ms": 2334.547,
-          "end_ms": 2359.58,
-          "duration_ms": 25.033
-        },
-        {
-          "start_ms": 2362.711,
-          "end_ms": 2387.556,
-          "duration_ms": 24.846
-        },
-        {
-          "start_ms": 2390.899,
-          "end_ms": 2415.802,
-          "duration_ms": 24.903
-        },
-        {
-          "start_ms": 2419.072,
-          "end_ms": 2444.027,
-          "duration_ms": 24.955
-        },
-        {
-          "start_ms": 2447.131,
-          "end_ms": 2472.143,
-          "duration_ms": 25.012
-        },
-        {
-          "start_ms": 2474.002,
-          "end_ms": 2476.502,
-          "duration_ms": 2.5
-        },
-        {
-          "start_ms": 2476.7,
-          "end_ms": 2478.947,
-          "duration_ms": 2.247
-        },
-        {
-          "start_ms": 2479.138,
-          "end_ms": 2481.364,
-          "duration_ms": 2.226
-        },
-        {
-          "start_ms": 2481.557,
-          "end_ms": 2483.878,
-          "duration_ms": 2.321
-        },
-        {
-          "start_ms": 2484.072,
-          "end_ms": 2486.293,
-          "duration_ms": 2.221
-        },
-        {
-          "start_ms": 2486.482,
-          "end_ms": 2488.7,
-          "duration_ms": 2.217
-        },
-        {
-          "start_ms": 2488.898,
-          "end_ms": 2491.133,
-          "duration_ms": 2.235
-        },
-        {
-          "start_ms": 2491.325,
-          "end_ms": 2493.606,
-          "duration_ms": 2.281
-        },
-        {
-          "start_ms": 2493.794,
-          "end_ms": 2496.222,
-          "duration_ms": 2.428
-        },
-        {
-          "start_ms": 2496.418,
-          "end_ms": 2498.862,
-          "duration_ms": 2.444
-        },
-        {
-          "start_ms": 2499.056,
-          "end_ms": 2501.517,
-          "duration_ms": 2.461
-        }
-      ]
+      "load_ms": 1068.313,
+      "preprocess_ms": 286.923,
+      "h2d_ms": 28.523,
+      "sw_total_ms": 190.964,
+      "sw_network_ms": 157.408,
+      "sw_aggregate_ms": 33.556,
+      "postprocess_ms": 4477.391,
+      "e2e_total_ms": 6052.831,
+      "peak_vram_mb": 247.82,
+      "num_patch_batches": 18
+    }
+  ],
+  "optimized_repeats": [
+    {
+      "repeat": 0,
+      "case_id": "spleen_6",
+      "load_ms": 1.798,
+      "preprocess_ms": 37.607,
+      "h2d_ms": 80.299,
+      "sw_total_ms": 180.053,
+      "sw_network_ms": 148.449,
+      "sw_aggregate_ms": 31.604,
+      "postprocess_ms": 4.048,
+      "e2e_total_ms": 304.674,
+      "peak_vram_mb": 450.56,
+      "num_patch_batches": 7
+    },
+    {
+      "repeat": 1,
+      "case_id": "spleen_6",
+      "load_ms": 1.769,
+      "preprocess_ms": 4.283,
+      "h2d_ms": 61.586,
+      "sw_total_ms": 65.393,
+      "sw_network_ms": 58.301,
+      "sw_aggregate_ms": 7.092,
+      "postprocess_ms": 4.88,
+      "e2e_total_ms": 138.462,
+      "peak_vram_mb": 451.32,
+      "num_patch_batches": 7
+    },
+    {
+      "repeat": 2,
+      "case_id": "spleen_6",
+      "load_ms": 3.169,
+      "preprocess_ms": 3.189,
+      "h2d_ms": 62.115,
+      "sw_total_ms": 59.915,
+      "sw_network_ms": 53.261,
+      "sw_aggregate_ms": 6.654,
+      "postprocess_ms": 4.272,
+      "e2e_total_ms": 133.374,
+      "peak_vram_mb": 451.32,
+      "num_patch_batches": 7
+    },
+    {
+      "repeat": 3,
+      "case_id": "spleen_6",
+      "load_ms": 1.646,
+      "preprocess_ms": 3.215,
+      "h2d_ms": 68.752,
+      "sw_total_ms": 60.19,
+      "sw_network_ms": 52.634,
+      "sw_aggregate_ms": 7.557,
+      "postprocess_ms": 5.691,
+      "e2e_total_ms": 140.57,
+      "peak_vram_mb": 451.32,
+      "num_patch_batches": 7
+    },
+    {
+      "repeat": 4,
+      "case_id": "spleen_6",
+      "load_ms": 2.653,
+      "preprocess_ms": 2.946,
+      "h2d_ms": 61.574,
+      "sw_total_ms": 61.546,
+      "sw_network_ms": 53.853,
+      "sw_aggregate_ms": 7.693,
+      "postprocess_ms": 5.911,
+      "e2e_total_ms": 135.2,
+      "peak_vram_mb": 451.32,
+      "num_patch_batches": 7
     }
   ]
 }

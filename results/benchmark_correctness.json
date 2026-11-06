@@ -1,0 +1,243 @@
+{
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "gpu_telemetry": {
+    "gpu_temp_c": 66.0,
+    "graphics_clock_mhz": 1807.0,
+    "memory_clock_mhz": 9001.0,
+    "power_draw_w": 66.07,
+    "power_limit_w": null,
+    "pstate": "P4",
+    "gpu_util_pct": 4.0,
+    "mem_util_pct": 0.0
+  },
+  "cuda_hardware_kernels": {
+    "source_file": "cuda/medical_kernels.cu",
+    "compile_arch": "compute_120",
+    "ptx_size_bytes": 72995,
+    "sm_count": 60,
+    "kernels": {
+      "hu_window_normalize_f32": {
+        "num_registers_per_thread": 23,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "hu_window_normalize_vec4_f32": {
+        "num_registers_per_thread": 48,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 5,
+        "active_warps_per_sm_at_256t": 40,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 83.33
+      },
+      "affine_trilinear_resample_3d_f32": {
+        "num_registers_per_thread": 72,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 896,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 3,
+        "active_warps_per_sm_at_256t": 24,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 50.0
+      },
+      "fused_preprocess_affine_trilinear_hu_f32": {
+        "num_registers_per_thread": 37,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "affine_nearest_resample_3d_u8": {
+        "num_registers_per_thread": 16,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "fused_softmax_2ch_p1_f32": {
+        "num_registers_per_thread": 32,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "fused_invert_trilinear_threshold_u8": {
+        "num_registers_per_thread": 38,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "count_nonzero_u8": {
+        "num_registers_per_thread": 36,
+        "static_shared_mem_bytes": 128,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 6,
+        "active_warps_per_sm_at_256t": 48,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "sliding_window_gaussian_accumulate_f32": {
+        "num_registers_per_thread": 56,
+        "static_shared_mem_bytes": 0,
+        "const_mem_bytes": 0,
+        "local_mem_bytes_per_thread": 0,
+        "max_threads_per_block": 1024,
+        "ptx_version": 120,
+        "sass_binary_version": 120,
+        "active_blocks_per_sm_at_256t": 4,
+        "active_warps_per_sm_at_256t": 32,
+        "max_warps_per_sm": 48,
+        "theoretical_occupancy_pct": 66.67
+      }
+    }
+  },
+  "backend_precision_comparison": {
+    "pytorch_fp32_bn_folded": {
+      "rand_patch_max_abs_diff": 1.239776611328125e-05,
+      "rand_patch_mean_abs_diff": 1.660237444411905e-06,
+      "rand_patch_ch0_signed_bias": -2.0254285004739359e-07,
+      "rand_patch_ch1_signed_bias": 1.5604423708737158e-07,
+      "real_patch_max_abs_diff": 1.33514404296875e-05,
+      "real_patch_mean_abs_diff": 1.7245052958969609e-06,
+      "real_patch_prob_mae": 1.3148725164224828e-10,
+      "real_patch_cosine_similarity": 0.9999999,
+      "real_patch_voxel_agreement_pct": 100.0
+    },
+    "pytorch_tf32": {
+      "rand_patch_max_abs_diff": 0.0053844451904296875,
+      "rand_patch_mean_abs_diff": 0.0006750958855263889,
+      "rand_patch_ch0_signed_bias": -0.00045531042269431055,
+      "rand_patch_ch1_signed_bias": 0.0003595931048039347,
+      "real_patch_max_abs_diff": 0.005486488342285156,
+      "real_patch_mean_abs_diff": 0.0006596801104024053,
+      "real_patch_prob_mae": 1.1215582418344638e-07,
+      "real_patch_cosine_similarity": 1.0,
+      "real_patch_voxel_agreement_pct": 100.0
+    },
+    "pytorch_amp_bn_folded": {
+      "rand_patch_max_abs_diff": 0.02025604248046875,
+      "rand_patch_mean_abs_diff": 0.003320462303236127,
+      "rand_patch_ch0_signed_bias": -0.002955955220386386,
+      "rand_patch_ch1_signed_bias": 0.0029167744796723127,
+      "real_patch_max_abs_diff": 0.02165508270263672,
+      "real_patch_mean_abs_diff": 0.0034294065553694963,
+      "real_patch_prob_mae": 1.4618417765177583e-07,
+      "real_patch_cosine_similarity": 0.9999998,
+      "real_patch_voxel_agreement_pct": 100.0
+    },
+    "pytorch_amp_unfolded": {
+      "rand_patch_max_abs_diff": 0.18331432342529297,
+      "rand_patch_mean_abs_diff": 0.07737129926681519,
+      "rand_patch_ch0_signed_bias": -0.0891806110739708,
+      "rand_patch_ch1_signed_bias": 0.06556198745965958,
+      "real_patch_max_abs_diff": 0.18123531341552734,
+      "real_patch_mean_abs_diff": 0.07642880082130432,
+      "real_patch_prob_mae": 5.967975084786303e-06,
+      "real_patch_cosine_similarity": 0.9999957,
+      "real_patch_voxel_agreement_pct": 99.99989
+    },
+    "pytorch_fp16_bn_folded": {
+      "rand_patch_max_abs_diff": 0.02419567108154297,
+      "rand_patch_mean_abs_diff": 0.004824692849069834,
+      "rand_patch_ch0_signed_bias": -0.004918140359222889,
+      "rand_patch_ch1_signed_bias": 0.004427328240126371,
+      "real_patch_max_abs_diff": 0.024505615234375,
+      "real_patch_mean_abs_diff": 0.0037298474926501513,
+      "real_patch_prob_mae": 2.331483557327374e-07,
+      "real_patch_cosine_similarity": 0.9999998,
+      "real_patch_voxel_agreement_pct": 100.0
+    },
+    "trt_fp32": {
+      "rand_patch_max_abs_diff": 1.71661376953125e-05,
+      "rand_patch_mean_abs_diff": 2.131167320840177e-06,
+      "rand_patch_ch0_signed_bias": 2.8653799333255847e-08,
+      "rand_patch_ch1_signed_bias": -3.155107819452496e-08,
+      "real_patch_max_abs_diff": 2.09808349609375e-05,
+      "real_patch_mean_abs_diff": 2.397287062194664e-06,
+      "real_patch_prob_mae": 1.8868873130628572e-10,
+      "real_patch_cosine_similarity": 1.0,
+      "real_patch_voxel_agreement_pct": 100.0
+    },
+    "trt_fp16_unfolded": {
+      "rand_patch_max_abs_diff": 0.2109518051147461,
+      "rand_patch_mean_abs_diff": 0.1376899778842926,
+      "rand_patch_ch0_signed_bias": -0.15912143886089325,
+      "rand_patch_ch1_signed_bias": 0.11625852435827255,
+      "real_patch_max_abs_diff": 0.22287654876708984,
+      "real_patch_mean_abs_diff": 0.13497787714004517,
+      "real_patch_prob_mae": 1.1065540093113668e-05,
+      "real_patch_cosine_similarity": 0.9999926,
+      "real_patch_voxel_agreement_pct": 99.99977
+    },
+    "trt_fp16_bn_folded": {
+      "rand_patch_max_abs_diff": 0.03466606140136719,
+      "rand_patch_mean_abs_diff": 0.0038673386443406343,
+      "rand_patch_ch0_signed_bias": -0.0025534434244036674,
+      "rand_patch_ch1_signed_bias": 0.002610726049169898,
+      "real_patch_max_abs_diff": 0.037494659423828125,
+      "real_patch_mean_abs_diff": 0.004260967019945383,
+      "real_patch_prob_mae": 2.8129107931818e-07,
+      "real_patch_cosine_similarity": 0.9999998,
+      "real_patch_voxel_agreement_pct": 100.0
+    }
+  },
+  "custom_cuda_edge_cases": {
+    "non_contiguous_hu_max_abs_diff": 0.0,
+    "odd_length_vec4_tail_max_abs_diff": 0.0,
+    "empty_mask_voxel_count": 0,
+    "nearest_neighbor_unique_labels": [
+      0,
+      1
+    ],
+    "all_passed": true
+  }
+}

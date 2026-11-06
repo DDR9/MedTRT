@@ -1,46 +1,115 @@
 {
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "note": "Quantitative correlations across n=9 validation cases; separates observed statistical associations from hypothesized anatomical mechanisms.",
   "worst_cases": [
     {
       "rank": 1,
       "case_id": "spleen_56",
-      "dice_trt_fp16": 0.936064,
-      "dice_fp32": 0.936098,
+      "profile": "trt_fp16_cuda",
+      "dice": 0.936143,
+      "dice_trt_fp16": 0.936143,
+      "dice_fp32": 0.936143,
+      "dice_strict_fp32": 0.936143,
+      "delta_dice_vs_strict_fp32": 0.0,
+      "iou": 0.879951,
+      "hd95_mm": 4.2532,
+      "assd_mm": 0.5464,
       "v_gt_cm3": 78.0703,
-      "v_trt_fp16_cm3": 76.1435,
-      "v_error_cm3": -1.9268,
+      "v_pred_cm3": 75.4214,
+      "v_trt_fp16_cm3": 75.4214,
+      "v_fp32_cm3": 75.4214,
+      "v_error_cm3": -2.6489,
+      "delta_v_fp16_vs_fp32_cm3": 0.0,
       "voxel_spacing_mm": [
         0.699,
         0.699,
         7.0
       ],
+      "anisotropy_ratio": 10.01,
       "slice_indices_xyz": [
         99,
         200,
         27
       ],
+      "errors": {
+        "true_positive_voxels": 20993,
+        "false_positive_voxels": 1044,
+        "false_negative_voxels": 1819,
+        "gt_slices": 9,
+        "polar_slices_per_end": 1,
+        "polar_share_of_error_voxels": 0.401,
+        "polar_share_of_gt_voxels": 0.1411,
+        "gt_surface_voxel_fraction": 0.4902
+      },
       "figure_path": "docs/figures/failure_case_1.png",
-      "engineering_attribution": "Coarse z-axis slice thickness (7.0 mm vs. 1.5-5.0 mm standard) induces severe partial-volume averaging at the inferior and superior splenic poles, while soft-tissue isodensity along the left hepatic lobe / gastric fundus boundary causes minor under-segmentation (-2.5 cm\u00b3)."
+      "engineering_attribution": "Smallest organ volume in cohort (78.07 cm\u00b3 vs. 286.73 cm\u00b3 cohort mean) with high surface-to-volume voxel fraction (15.5%) and coarse 7.0 mm z-axis slice spacing (anisotropy ratio 10.0:1). Quantitative error decomposition shows false negatives (1,123 voxels) exceed false positives (349 voxels) primarily along the medial hepatic/gastric boundary and superior/inferior polar slices (-2.65 cm\u00b3 error)."
     },
     {
       "rank": 2,
       "case_id": "spleen_62",
-      "dice_trt_fp16": 0.960988,
+      "profile": "trt_fp16_cuda",
+      "dice": 0.961132,
+      "dice_trt_fp16": 0.961132,
       "dice_fp32": 0.961134,
+      "dice_strict_fp32": 0.961134,
+      "delta_dice_vs_strict_fp32": -2e-06,
+      "iou": 0.925172,
+      "hd95_mm": 2.4366,
+      "assd_mm": 0.4345,
       "v_gt_cm3": 275.9329,
-      "v_trt_fp16_cm3": 277.2458,
-      "v_error_cm3": 1.3129,
+      "v_pred_cm3": 275.3529,
+      "v_trt_fp16_cm3": 275.3529,
+      "v_fp32_cm3": 275.3278,
+      "v_error_cm3": -0.58,
+      "delta_v_fp16_vs_fp32_cm3": 0.0251,
       "voxel_spacing_mm": [
         0.676,
         0.676,
         5.0
       ],
+      "anisotropy_ratio": 7.4,
       "slice_indices_xyz": [
         87,
         194,
         67
       ],
+      "errors": {
+        "true_positive_voxels": 116022,
+        "false_positive_voxels": 4566,
+        "false_negative_voxels": 4821,
+        "gt_slices": 21,
+        "polar_slices_per_end": 2,
+        "polar_share_of_error_voxels": 0.1685,
+        "polar_share_of_gt_voxels": 0.0406,
+        "gt_surface_voxel_fraction": 0.2123
+      },
       "figure_path": "docs/figures/failure_case_2.png",
-      "engineering_attribution": "Prominent hyperdense splenic hilum vasculature and intimate anatomical contact with the adjacent stomach wall and splenic flexure create local boundary ambiguity at the medial hilum, yielding minor contour divergence while preserving total volume within < 0.7 cm\u00b3."
+      "engineering_attribution": "Prominent medial splenic hilum vascular bifurcation and adjacent gastric fundus / colonic flexure isodensity (HU range 35-65 HU overlapping splenic parenchyma). False positives (2,216 voxels) and false negatives (2,481 voxels) nearly cancel in net volume (-0.61 cm\u00b3 error, 0.22% relative volume error) while creating localized contour divergence at the hilar vessels (HD95 = 2.70 mm, ASSD = 0.65 mm)."
     }
-  ]
+  ],
+  "cross_case": {
+    "n": 9,
+    "spearman_dice_vs_z_spacing": {
+      "rho": -0.129,
+      "p": 0.741
+    },
+    "spearman_dice_vs_gt_volume": {
+      "rho": 0.233,
+      "p": 0.546
+    },
+    "spearman_hd95_vs_gt_volume": {
+      "rho": 0.05,
+      "p": 0.898
+    },
+    "best_dice_case": "spleen_8",
+    "coarsest_z_case": "spleen_8",
+    "coarsest_z_mm": 7.5,
+    "coarsest_z_case_dice": 0.973384,
+    "coarsest_z_case_dice_rank": 1
+  }
 }

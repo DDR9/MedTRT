@@ -1,0 +1,59 @@
+{
+ "targets": {
+  "e2e_ms": 500.0,
+  "mean_dice": 0.96,
+  "abs_delta_dice": 0.005
+ },
+ "checks": [
+  {
+   "check": "single code version",
+   "passed": true,
+   "detail": "all 29 result files share code e9d4f060aaf1b130"
+  },
+  {
+   "check": "benchmark protocol",
+   "passed": true,
+   "detail": "13 profiles timed (18-90 passes per profile)"
+  },
+  {
+   "check": "summaries match raw passes",
+   "passed": true,
+   "detail": "stage medians recomputed from raw passes"
+  },
+  {
+   "check": "event timing vs wall clock",
+   "passed": true,
+   "detail": "CUDA events vs wall clock: worst median gap 0.26%"
+  },
+  {
+   "check": "validation.csv freshness",
+   "passed": true,
+   "detail": "validation.csv matches every eval CSV"
+  },
+  {
+   "check": "agreement recomputes",
+   "passed": true,
+   "detail": "agreement statistics recomputed from eval CSVs"
+  },
+  {
+   "check": "targets (trt_fp16_optimized)",
+   "passed": true,
+   "detail": "every pass < 500 ms (max 122.6); mean Dice >= 0.96 (0.964778); mean |dDice| < 0.005 (0.001669); like-for-like every case |dDice| < 0.005 (max 0.000029)"
+  },
+  {
+   "check": "README is generated",
+   "passed": true,
+   "detail": "README.md is byte-identical to a fresh render of results/"
+  },
+  {
+   "check": "README language",
+   "passed": true,
+   "detail": "no unsupported claims (Nsight executed: False)"
+  },
+  {
+   "check": "no local paths",
+   "passed": true,
+   "detail": "no local paths in results/"
+  }
+ ]
+}

@@ -1,0 +1,145 @@
+{
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "gpu_telemetry": {
+    "gpu_temp_c": 67.0,
+    "graphics_clock_mhz": 1417.0,
+    "memory_clock_mhz": 14001.0,
+    "power_draw_w": 28.88,
+    "power_limit_w": null,
+    "pstate": "P0",
+    "gpu_util_pct": 0.0,
+    "mem_util_pct": 0.0
+  },
+  "volume_scaling": [
+    {
+      "shape": [
+        256,
+        256,
+        64
+      ],
+      "voxels_millions": 4.194,
+      "hu_norm_pytorch_ms": 0.0602,
+      "hu_norm_cuda_vec4_ms": 0.0338,
+      "hu_norm_speedup": 1.78,
+      "trilinear_pytorch_ms": 0.3887,
+      "trilinear_cuda_ms": 0.061,
+      "trilinear_speedup": 6.37,
+      "nearest_u8_pytorch_ms": 2.0968,
+      "nearest_u8_cuda_ms": 0.0669,
+      "nearest_u8_speedup": 31.34,
+      "voxel_count_pytorch_ms": 0.2483,
+      "voxel_count_cuda_ms": 0.1862,
+      "voxel_count_speedup": 1.33,
+      "fused_post_pytorch_ms": 2.1746,
+      "fused_post_cuda_ms": 0.4358,
+      "fused_post_speedup": 4.99,
+      "fused_post_pytorch_vram_mb": 117.5,
+      "fused_post_cuda_vram_mb": 4.75
+    },
+    {
+      "shape": [
+        512,
+        512,
+        32
+      ],
+      "voxels_millions": 8.389,
+      "hu_norm_pytorch_ms": 0.2874,
+      "hu_norm_cuda_vec4_ms": 0.1182,
+      "hu_norm_speedup": 2.43,
+      "trilinear_pytorch_ms": 0.9216,
+      "trilinear_cuda_ms": 0.0993,
+      "trilinear_speedup": 9.28,
+      "nearest_u8_pytorch_ms": 4.6148,
+      "nearest_u8_cuda_ms": 0.1155,
+      "nearest_u8_speedup": 39.95,
+      "voxel_count_pytorch_ms": 0.4749,
+      "voxel_count_cuda_ms": 0.1635,
+      "voxel_count_speedup": 2.9,
+      "fused_post_pytorch_ms": 4.5379,
+      "fused_post_cuda_ms": 0.5042,
+      "fused_post_speedup": 9.0,
+      "fused_post_pytorch_vram_mb": 235.0,
+      "fused_post_cuda_vram_mb": 9.5
+    },
+    {
+      "shape": [
+        512,
+        512,
+        64
+      ],
+      "voxels_millions": 16.777,
+      "hu_norm_pytorch_ms": 0.6569,
+      "hu_norm_cuda_vec4_ms": 0.2293,
+      "hu_norm_speedup": 2.86,
+      "trilinear_pytorch_ms": 2.7911,
+      "trilinear_cuda_ms": 0.257,
+      "trilinear_speedup": 10.86,
+      "nearest_u8_pytorch_ms": 9.8299,
+      "nearest_u8_cuda_ms": 0.589,
+      "nearest_u8_speedup": 16.69,
+      "voxel_count_pytorch_ms": 0.9916,
+      "voxel_count_cuda_ms": 0.3812,
+      "voxel_count_speedup": 2.6,
+      "fused_post_pytorch_ms": 18.138,
+      "fused_post_cuda_ms": 0.8835,
+      "fused_post_speedup": 20.53,
+      "fused_post_pytorch_vram_mb": 470.0,
+      "fused_post_cuda_vram_mb": 19.0
+    },
+    {
+      "shape": [
+        512,
+        512,
+        128
+      ],
+      "voxels_millions": 33.554,
+      "hu_norm_pytorch_ms": 1.3545,
+      "hu_norm_cuda_vec4_ms": 0.503,
+      "hu_norm_speedup": 2.69,
+      "trilinear_pytorch_ms": 6.225,
+      "trilinear_cuda_ms": 0.469,
+      "trilinear_speedup": 13.27,
+      "nearest_u8_pytorch_ms": 28.3662,
+      "nearest_u8_cuda_ms": 0.7443,
+      "nearest_u8_speedup": 38.11,
+      "voxel_count_pytorch_ms": 1.4475,
+      "voxel_count_cuda_ms": 0.2159,
+      "voxel_count_speedup": 6.7,
+      "fused_post_pytorch_ms": 21.6135,
+      "fused_post_cuda_ms": 1.5707,
+      "fused_post_speedup": 13.76,
+      "fused_post_pytorch_vram_mb": 940.5,
+      "fused_post_cuda_vram_mb": 38.25
+    },
+    {
+      "shape": [
+        512,
+        512,
+        192
+      ],
+      "voxels_millions": 50.332,
+      "hu_norm_pytorch_ms": 1.7515,
+      "hu_norm_cuda_vec4_ms": 0.7093,
+      "hu_norm_speedup": 2.47,
+      "trilinear_pytorch_ms": 8.6686,
+      "trilinear_cuda_ms": 0.8113,
+      "trilinear_speedup": 10.68,
+      "nearest_u8_pytorch_ms": 28.6653,
+      "nearest_u8_cuda_ms": 0.5963,
+      "nearest_u8_speedup": 48.07,
+      "voxel_count_pytorch_ms": 1.8294,
+      "voxel_count_cuda_ms": 0.2178,
+      "voxel_count_speedup": 8.4,
+      "fused_post_pytorch_ms": 43.963,
+      "fused_post_cuda_ms": 2.32,
+      "fused_post_speedup": 18.95,
+      "fused_post_pytorch_vram_mb": 1411.0,
+      "fused_post_cuda_vram_mb": 57.5
+    }
+  ]
+}

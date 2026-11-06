@@ -1,0 +1,107 @@
+{
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "gpu_telemetry": {
+    "gpu_temp_c": 66.0,
+    "graphics_clock_mhz": 1755.0,
+    "memory_clock_mhz": 9001.0,
+    "power_draw_w": 24.22,
+    "power_limit_w": null,
+    "pstate": "P4",
+    "gpu_util_pct": 6.0,
+    "mem_util_pct": 1.0
+  },
+  "total_gpu_vram_mb": 16302.56,
+  "static_model_footprint_mb": {
+    "pytorch_fp32_weights_mb": 18.39,
+    "pytorch_fp16_weights_mb": 28.21,
+    "trt_fp32": {
+      "engine_file_mb": 22.97,
+      "device_ctx_mb": 0.0,
+      "total_static_mb": 22.97
+    },
+    "trt_fp16": {
+      "engine_file_mb": 13.7,
+      "device_ctx_mb": 0.0,
+      "total_static_mb": 13.7
+    }
+  },
+  "pipeline_peak_memory": {
+    "pytorch_amp": {
+      "median_allocated_mb": 346.7231,
+      "max_allocated_mb": 457.0552,
+      "max_reserved_mb": 702.0,
+      "vram_utilization_pct_of_16gb": 2.8
+    },
+    "pytorch_fp16": {
+      "median_allocated_mb": 347.9482,
+      "max_allocated_mb": 457.7666,
+      "max_reserved_mb": 604.0,
+      "vram_utilization_pct_of_16gb": 2.81
+    },
+    "pytorch_fp32": {
+      "median_allocated_mb": 377.4253,
+      "max_allocated_mb": 486.7261,
+      "max_reserved_mb": 692.0,
+      "vram_utilization_pct_of_16gb": 2.99
+    },
+    "pytorch_fp32_strict": {
+      "median_allocated_mb": 378.7773,
+      "max_allocated_mb": 489.7261,
+      "max_reserved_mb": 742.0,
+      "vram_utilization_pct_of_16gb": 3.0
+    },
+    "pytorch_tf32_gpu": {
+      "median_allocated_mb": 1226.5991,
+      "max_allocated_mb": 2306.5747,
+      "max_reserved_mb": 3704.0,
+      "vram_utilization_pct_of_16gb": 14.15
+    },
+    "trt_fp16": {
+      "median_allocated_mb": 248.2951,
+      "max_allocated_mb": 359.0959,
+      "max_reserved_mb": 547.7034,
+      "vram_utilization_pct_of_16gb": 2.2
+    },
+    "trt_fp16_cuda": {
+      "median_allocated_mb": 327.2951,
+      "max_allocated_mb": 454.5784,
+      "max_reserved_mb": 737.7034,
+      "vram_utilization_pct_of_16gb": 2.79
+    },
+    "trt_fp16_gpu": {
+      "median_allocated_mb": 1221.3127,
+      "max_allocated_mb": 2301.2883,
+      "max_reserved_mb": 3667.7034,
+      "vram_utilization_pct_of_16gb": 14.12
+    },
+    "trt_fp16_nn": {
+      "median_allocated_mb": 1081.4768,
+      "max_allocated_mb": 2148.9621,
+      "max_reserved_mb": 3367.7034,
+      "vram_utilization_pct_of_16gb": 13.18
+    },
+    "trt_fp16_optimized": {
+      "median_allocated_mb": 394.2951,
+      "max_allocated_mb": 522.0784,
+      "max_reserved_mb": 835.7034,
+      "vram_utilization_pct_of_16gb": 3.2
+    },
+    "trt_fp16_unfolded": {
+      "median_allocated_mb": 248.3408,
+      "max_allocated_mb": 359.1416,
+      "max_reserved_mb": 547.749,
+      "vram_utilization_pct_of_16gb": 2.2
+    },
+    "trt_fp32": {
+      "median_allocated_mb": 257.5607,
+      "max_allocated_mb": 368.3615,
+      "max_reserved_mb": 556.9689,
+      "vram_utilization_pct_of_16gb": 2.26
+    }
+  }
+}

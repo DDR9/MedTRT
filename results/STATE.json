@@ -1,58 +1,13 @@
 {
-  "current_phase": "PHASE_8_STAGE_2_COMPLETE",
-  "phase_0_status": "PASS",
-  "phase_1_status": "PASS",
-  "phase_2_status": "PASS",
-  "phase_3_status": "PASS",
-  "phase_4_status": "PASS",
-  "phase_5_status": "PASS",
-  "phase_6_status": "PASS",
-  "phase_7_status": "PASS",
-  "phase_8_status": "PASS",
-  "stage_2_optimizations": {
-    "status": "PASS",
-    "overlap": 0.25,
-    "sw_batch_size": 8,
-    "postprocess_dtype": "uint8_cuda_nearest",
-    "reader_mode": "uncompressed_mmap_nii",
-    "median_e2e_ms": 198.281,
-    "median_sw_network_ms": 21.3911,
-    "median_postprocess_ms": 68.4437,
-    "median_load_ms": 2.6997,
-    "io_gzip_median_ms": 720.03,
-    "io_mmap_median_ms": 4.53,
-    "io_speedup_factor": 159.06,
-    "mean_heldout_dice": 0.960661,
-    "target_e2e_under_500ms": true,
-    "target_dice_ge_0_960": true
+  "current_phase": "COMPLETE",
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
   },
-  "updated_at": "2026-11-05T18:04:50Z",
-  "artifacts": {
-    "env_json": "results/env.json",
-    "heldout_cases_json": "results/heldout_cases.json",
-    "trt_build_json": "results/trt_build.json",
-    "bench_pytorch_fp32_strict_json": "results/bench_pytorch_fp32_strict.json",
-    "bench_pytorch_fp32_json": "results/bench_pytorch_fp32.json",
-    "bench_pytorch_amp_json": "results/bench_pytorch_amp.json",
-    "bench_trt_fp16_json": "results/bench_trt_fp16.json",
-    "bench_trt_fp16_optimized_json": "results/bench_trt_fp16_optimized.json",
-    "eval_pytorch_fp32_strict_csv": "results/eval_pytorch_fp32_strict.csv",
-    "eval_pytorch_fp32_csv": "results/eval_pytorch_fp32.csv",
-    "eval_pytorch_amp_csv": "results/eval_pytorch_amp.csv",
-    "eval_trt_fp16_csv": "results/eval_trt_fp16.csv",
-    "eval_trt_fp16_optimized_csv": "results/eval_trt_fp16_optimized.csv",
-    "sweep_csv": "results/sweep.csv",
-    "validation_csv": "results/validation.csv",
-    "bland_altman_json": "results/bland_altman.json",
-    "failure_analysis_json": "results/failure_analysis.json",
-    "nsys_summary_json": "results/nsys_summary.json",
-    "figures": [
-      "docs/figures/stage_breakdown.png",
-      "docs/figures/nsys_trace.png",
-      "docs/figures/pareto_sweep.png",
-      "docs/figures/bland_altman.png",
-      "docs/figures/failure_case_1.png",
-      "docs/figures/failure_case_2.png"
-    ]
-  }
+  "fast_profile": "trt_fp16_optimized",
+  "median_e2e_ms": 68.8795,
+  "max_e2e_ms": 122.5894,
+  "mean_dice": 0.964778
 }

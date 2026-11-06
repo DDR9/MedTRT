@@ -1,0 +1,240 @@
+{
+  "run": {
+    "timestamp": "2026-11-06T05:32:47.351675+00:00",
+    "code_fingerprint": "e9d4f060aaf1b130",
+    "engine_fingerprint": "28d585aaed46e401",
+    "parent_commit": "901724f"
+  },
+  "gpu_telemetry": {
+    "gpu_temp_c": 64.0,
+    "graphics_clock_mhz": 180.0,
+    "memory_clock_mhz": 9001.0,
+    "power_draw_w": 18.9,
+    "power_limit_w": null,
+    "pstate": "P4",
+    "gpu_util_pct": 0.0,
+    "mem_util_pct": 0.0
+  },
+  "case_id": "spleen_6",
+  "native_shape": [
+    512,
+    512,
+    135
+  ],
+  "resampled_shape": [
+    314,
+    314,
+    108
+  ],
+  "methods": {
+    "monai_cpu_trilinear": {
+      "latency_ms": {
+        "median": 4426.4326,
+        "iqr": 19.278,
+        "q25": 4426.2024,
+        "q75": 4445.4803,
+        "mean": 4438.9776,
+        "std": 22.1286,
+        "min": 4425.9721,
+        "max": 4464.5281,
+        "p90": 4456.909,
+        "p95": 4460.7185,
+        "ci95_lower": 4384.0072,
+        "ci95_upper": 4493.948
+      },
+      "dice": 0.972795,
+      "voxel_agreement_vs_monai_gpu_pct": 100.0
+    },
+    "monai_gpu_trilinear": {
+      "warmup_iters": 5,
+      "timed_iters": 20,
+      "cuda_event_ms": {
+        "median": 118.7593,
+        "iqr": 9.0639,
+        "q25": 115.583,
+        "q75": 124.6469,
+        "mean": 122.3229,
+        "std": 11.4052,
+        "min": 111.6161,
+        "max": 155.8307,
+        "p90": 132.2356,
+        "p95": 148.6541,
+        "ci95_lower": 116.9851,
+        "ci95_upper": 127.6607
+      },
+      "wall_clock_ms": {
+        "median": 118.9169,
+        "iqr": 9.0576,
+        "q25": 115.7298,
+        "q75": 124.7874,
+        "mean": 122.489,
+        "std": 11.404,
+        "min": 111.7936,
+        "max": 155.9779,
+        "p90": 132.3883,
+        "p95": 148.8343,
+        "ci95_lower": 117.1517,
+        "ci95_upper": 127.8262
+      },
+      "peak_allocated_vram_mb": 2288.62,
+      "incremental_allocated_vram_mb": 2100.25,
+      "peak_reserved_vram_mb": 2982.0,
+      "dice": 0.972795,
+      "voxel_agreement_vs_monai_gpu_pct": 100.0
+    },
+    "monai_gpu_nearest_u8": {
+      "warmup_iters": 5,
+      "timed_iters": 20,
+      "cuda_event_ms": {
+        "median": 107.3764,
+        "iqr": 6.4429,
+        "q25": 104.4527,
+        "q75": 110.8956,
+        "mean": 107.9993,
+        "std": 4.3862,
+        "min": 102.2466,
+        "max": 117.3932,
+        "p90": 113.8448,
+        "p95": 114.9404,
+        "ci95_lower": 105.9465,
+        "ci95_upper": 110.0521
+      },
+      "wall_clock_ms": {
+        "median": 107.5611,
+        "iqr": 6.4368,
+        "q25": 104.6089,
+        "q75": 111.0457,
+        "mean": 108.1622,
+        "std": 4.379,
+        "min": 102.4009,
+        "max": 117.5394,
+        "p90": 113.9947,
+        "p95": 115.1263,
+        "ci95_lower": 106.1128,
+        "ci95_upper": 110.2117
+      },
+      "peak_allocated_vram_mb": 2136.02,
+      "incremental_allocated_vram_mb": 1947.65,
+      "peak_reserved_vram_mb": 2982.0,
+      "dice": 0.965312,
+      "voxel_agreement_vs_monai_gpu_pct": 99.98356
+    },
+    "custom_cuda_fused_trilinear": {
+      "warmup_iters": 5,
+      "timed_iters": 20,
+      "cuda_event_ms": {
+        "median": 0.9506,
+        "iqr": 0.0294,
+        "q25": 0.9332,
+        "q75": 0.9626,
+        "mean": 0.9691,
+        "std": 0.0684,
+        "min": 0.9136,
+        "max": 1.1794,
+        "p90": 1.0291,
+        "p95": 1.1354,
+        "ci95_lower": 0.9371,
+        "ci95_upper": 1.0011
+      },
+      "wall_clock_ms": {
+        "median": 0.9889,
+        "iqr": 0.0331,
+        "q25": 0.9721,
+        "q75": 1.0053,
+        "mean": 1.011,
+        "std": 0.0725,
+        "min": 0.9495,
+        "max": 1.2203,
+        "p90": 1.1177,
+        "p95": 1.1777,
+        "ci95_lower": 0.977,
+        "ci95_upper": 1.0449
+      },
+      "peak_allocated_vram_mb": 229.75,
+      "incremental_allocated_vram_mb": 41.38,
+      "peak_reserved_vram_mb": 2982.0,
+      "dice": 0.972795,
+      "fg_voxel_count": 154918,
+      "voxel_agreement_vs_monai_gpu_pct": 100.0
+    }
+  },
+  "speedups": {
+    "custom_cuda_vs_monai_cpu": 4656.46,
+    "custom_cuda_vs_monai_gpu_trilinear": 124.93,
+    "custom_cuda_vs_monai_gpu_nearest": 112.96,
+    "vram_reduction_vs_monai_gpu_trilinear": 50.76
+  },
+  "voxel_counting": {
+    "pytorch_count_nonzero": {
+      "warmup_iters": 5,
+      "timed_iters": 20,
+      "cuda_event_ms": {
+        "median": 1.4822,
+        "iqr": 0.0738,
+        "q25": 1.4475,
+        "q75": 1.5213,
+        "mean": 1.4889,
+        "std": 0.0447,
+        "min": 1.4298,
+        "max": 1.5711,
+        "p90": 1.5488,
+        "p95": 1.5645,
+        "ci95_lower": 1.468,
+        "ci95_upper": 1.5098
+      },
+      "wall_clock_ms": {
+        "median": 1.5214,
+        "iqr": 0.0798,
+        "q25": 1.4911,
+        "q75": 1.5708,
+        "mean": 1.532,
+        "std": 0.0461,
+        "min": 1.4729,
+        "max": 1.6095,
+        "p90": 1.598,
+        "p95": 1.6042,
+        "ci95_lower": 1.5104,
+        "ci95_upper": 1.5536
+      },
+      "peak_allocated_vram_mb": 492.12,
+      "incremental_allocated_vram_mb": 303.75,
+      "peak_reserved_vram_mb": 2982.0
+    },
+    "custom_cuda_count_nonzero_u8": {
+      "warmup_iters": 5,
+      "timed_iters": 20,
+      "cuda_event_ms": {
+        "median": 0.2111,
+        "iqr": 0.04,
+        "q25": 0.2059,
+        "q75": 0.246,
+        "mean": 0.2245,
+        "std": 0.0368,
+        "min": 0.1745,
+        "max": 0.3259,
+        "p90": 0.2679,
+        "p95": 0.2762,
+        "ci95_lower": 0.2073,
+        "ci95_upper": 0.2417
+      },
+      "wall_clock_ms": {
+        "median": 0.244,
+        "iqr": 0.0479,
+        "q25": 0.2314,
+        "q75": 0.2793,
+        "mean": 0.2559,
+        "std": 0.0398,
+        "min": 0.2004,
+        "max": 0.3668,
+        "p90": 0.3014,
+        "p95": 0.3054,
+        "ci95_lower": 0.2373,
+        "ci95_upper": 0.2746
+      },
+      "peak_allocated_vram_mb": 188.37,
+      "incremental_allocated_vram_mb": 0.0,
+      "peak_reserved_vram_mb": 2982.0
+    },
+    "exact_count_match": true
+  }
+}

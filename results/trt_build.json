@@ -1,10 +1,11 @@
 {
-  "timestamp": "2026-11-05T09:25:45.146851+00:00",
+  "timestamp": "2026-11-06T04:24:58.895162+00:00",
   "tensorrt_version": "10.16.1.11",
-  "engine_path": "engines\\spleen_unet_fp16.engine",
-  "engine_size_mb": 13.749,
-  "build_duration_s": 28.648,
+  "engine_path": "engines/spleen_unet_fp16.engine",
+  "engine_size_mb": 13.703,
+  "build_duration_s": 30.699,
   "precision": "FP16",
+  "fold_conv_transpose_bn": true,
   "min_shape": [
     1,
     1,
@@ -27,11 +28,13 @@
     96
   ],
   "onnx": {
-    "onnx_path": "engines\\spleen_unet_dynamic.onnx",
-    "onnx_size_mb": 18.36,
+    "onnx_path": "engines/spleen_unet_dynamic.onnx",
+    "onnx_size_mb": 18.355,
     "opset_version": 17,
-    "export_time_s": 0.714,
-    "max_abs_diff_vs_pytorch_fp32": 2.86102294921875e-05,
-    "mean_abs_diff_vs_pytorch_fp32": 2.928401045210194e-06
+    "num_nodes": 53,
+    "fold_conv_transpose_bn": true,
+    "export_time_s": 0.722,
+    "max_abs_diff_vs_pytorch_fp32": 2.6702880859375e-05,
+    "mean_abs_diff_vs_pytorch_fp32": 2.9136108423699625e-06
   }
 }

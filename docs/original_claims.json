@@ -1,0 +1,98 @@
+[
+  {
+    "id": "e2e",
+    "topic": "Latency",
+    "claim": "198.28 ms end-to-end volume latency",
+    "why": "Reproduced independently, by CUDA events and by wall clock. It is a median across volumes of different sizes."
+  },
+  {
+    "id": "e2e_speedup",
+    "topic": "Latency",
+    "claim": "18.53x end-to-end speedup",
+    "why": "The baseline's CPU inverse transform came from a .cpu() call in the harness, not from the bundle. Several changes were also combined; the ablation separates them."
+  },
+  {
+    "id": "network_speedup",
+    "topic": "Latency",
+    "claim": "16.27x network speedup",
+    "why": "Compared different window counts and GPU clock states. Only a comparison at identical windows measures the network."
+  },
+  {
+    "id": "load_speedup",
+    "topic": "Latency",
+    "claim": "159.1x load speedup (720.03 to 2.70 ms)",
+    "why": "The quoted times do not produce that ratio, and mmap defers the read into h2d. Ingest (load plus h2d) is the fair comparison."
+  },
+  {
+    "id": "host_share",
+    "topic": "Latency",
+    "claim": "CPU post-processing and gzip were 97.34% of runtime",
+    "why": "97.34% was the whole non-network share, not those two stages."
+  },
+  {
+    "id": "mean_dice",
+    "topic": "Accuracy",
+    "claim": "0.960661 mean Dice on the fast profile",
+    "why": "Nearest-label inversion lost Dice for almost no speed. The bundle's trilinear inversion on the GPU recovers it."
+  },
+  {
+    "id": "delta_dice",
+    "topic": "Accuracy",
+    "claim": "Mean Dice drift of 0.000548",
+    "why": "Measured on the slow pipeline against TF32, not on the fast profile against true FP32."
+  },
+  {
+    "id": "volume_bias",
+    "topic": "Accuracy",
+    "claim": "Volume bias of +1.6707 cm³",
+    "why": "This was a real FP16 error from BatchNorm left unfolded after ConvTranspose3d. Folding it removes the shift."
+  },
+  {
+    "id": "accuracy_gain",
+    "topic": "Accuracy",
+    "claim": "FP16 brought predictions closer to ground truth",
+    "why": "A side effect of that FP16 error, not an accuracy gain."
+  },
+  {
+    "id": "pareto",
+    "topic": "Method",
+    "claim": "overlap=0.25, sw_batch_size=8 is Pareto-optimal",
+    "why": "The original sweep used one pass per case and a different post-processing path from the shipped profile."
+  },
+  {
+    "id": "nsight",
+    "topic": "Method",
+    "claim": "Profiled with NVIDIA Nsight Systems",
+    "why": "The recorded run shows nsys never executed. The trace figure was drawn from CUDA events."
+  },
+  {
+    "id": "uint8",
+    "topic": "Method",
+    "claim": "uint8 nearest-neighbor grid sampling on the GPU",
+    "why": "It does run on the GPU, but grid_sample does not operate on uint8. Only the final mask copy is uint8."
+  },
+  {
+    "id": "split",
+    "topic": "Method",
+    "claim": "Strict, leakage-free held-out split",
+    "why": "These cases were never trained on, but the bundle chose its checkpoint on them. MSD test labels are not public."
+  },
+  {
+    "id": "failure_causes",
+    "topic": "Method",
+    "claim": "Failure causes were proven",
+    "why": "The explanations were fixed text, not analysis. The coarsest scan does not score worst."
+  },
+  {
+    "id": "reproducible",
+    "topic": "Method",
+    "claim": "Reproducible with make all",
+    "why": "make all could not run on a clean clone. A cross-platform pipeline and a verifier replace it."
+  },
+  {
+    "id": "clinical",
+    "topic": "Scope",
+    "claim": "Regulatory-grade validation for clinical workflows",
+    "why": "Nothing here supports clinical, triage, or regulatory claims, and the project's own disclaimer rules them out."
+  }
+]
