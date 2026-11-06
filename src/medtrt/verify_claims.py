@@ -244,6 +244,40 @@ def check_hardware_telemetry_audit() -> Result:
     )
 
 
+def check_external_cohort_and_tost() -> Result:
+    """
+    Verify the external unseen MICCAI FLARE22 validation cohort (N=12 scans on Google Drive)
+    and paired Two One-Sided Tests (TOST) equivalence across N=21 pooled patients.
+    """
+    ext = _json("external_flare22_validation.json")
+    meta = ext.get("external_cohort_metadata", {})
+    if meta.get("n_external_patients") != 12 or meta.get("n_pooled_validation_patients") != 21 or meta.get("total_gpu_verified_volumes") != 53:
+        return False, f"external cohort metadata mismatch: {meta}"
+
+    tost_pooled = ext.get("tost_equivalence_analysis", {}).get("pooled_cohorts_n21", {})
+    vol_cuda = tost_pooled.get("volume_folded_cuda_margin_0_10_cm3", {})
+    vol_unf = tost_pooled.get("volume_unfolded_margin_0_50_cm3", {})
+    dice_cuda = tost_pooled.get("dice_folded_cuda_margin_0_001", {})
+    if not (
+        vol_cuda.get("equivalent_at_alpha_0_05") is True
+        and vol_cuda.get("p_tost", 1.0) < 1e-4
+        and vol_unf.get("equivalent_at_alpha_0_05") is False
+        and dice_cuda.get("equivalent_at_alpha_0_05") is True
+        and dice_cuda.get("p_tost", 1.0) < 1e-4
+    ):
+        return False, f"TOST equivalence check failed: vol_cuda={vol_cuda}, vol_unf={vol_unf}, dice_cuda={dice_cuda}"
+
+    flare_table = ext.get("flare22_per_case_paired_table", [])
+    if len(flare_table) != 12:
+        return False, f"expected 12 FLARE22 paired rows, found {len(flare_table)}"
+
+    return (
+        True,
+        f"53 total CT volumes verified (41 MSD + 12 external FLARE22); pooled N=21 TOST equivalence PASS "
+        f"(dV={vol_cuda['mean_diff']:+.4f} cm³, 90% CI [{vol_cuda['ci90_low']:+.4f}, {vol_cuda['ci90_high']:+.4f}], p_TOST<1e-6)",
+    )
+
+
 CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("single code version", check_single_code_version),
     ("benchmark protocol", check_protocol),
@@ -257,6 +291,7 @@ CHECKS: Tuple[Tuple[str, Callable[[], Result]], ...] = (
     ("no local paths", check_no_local_paths),
     ("data split & leakage audit", check_data_leakage),
     ("latency & memory hardware telemetry audit", check_hardware_telemetry_audit),
+    ("external FLARE22 cohort & TOST equivalence audit", check_external_cohort_and_tost),
 )
 
 
