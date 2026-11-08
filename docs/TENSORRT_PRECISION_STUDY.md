@@ -1,4 +1,4 @@
-# Phase 5 — TensorRT 10.x Compilation, Dynamic Optimization Profiles & Numerical Precision Study
+# TensorRT 10.x Compilation, Dynamic Profiles & FP16 Numerical Stability Study (`docs/TENSORRT_PRECISION_STUDY.md`)
 
 > **Implementation Files:**
 > - Model Loader & `ConvTranspose3d+BatchNorm3d` FP64 Folder: [`src/medtrt/model.py`](../src/medtrt/model.py)

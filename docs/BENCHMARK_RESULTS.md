@@ -1,4 +1,4 @@
-# MedTRT Complete GPU Benchmark Results (`BENCHMARK_RESULTS.md`)
+# MedTRT Complete GPU Benchmark Results (`docs/BENCHMARK_RESULTS.md`)
 
 > **Hardware & Provenance:** `NVIDIA GeForce RTX 5080 Laptop GPU` (`15.92 GB` VRAM, `12.0 (sm_120)`), Driver `591.44`, CUDA `12.8`, TensorRT `10.16.1.11`, PyTorch `2.11.0+cu128`, MONAI `1.6.1`. All measurements come from `results/bench_*.json` and `results/benchmark_*.json`.
 
@@ -22,13 +22,13 @@
 | `trt_fp16_optimized` | `cuda` / `mmap` | `0.25` / `8` | `1.08` / `2.98` | `1.27` | `24.77` | `2.84` | **`68.88`** [`50.48`] | `109.65` / `122.59` | `14.52 vol/s` | `522 MB` | **`42.86×`** |
 | `trt_fp16_nn` | `gpu` / `mmap` | `0.25` / `8` | `1.07` / `3.00` | `41.72` | `20.82` | `69.27` | **`178.41`** [`141.32`] | `290.01` / `398.52` | `5.61 vol/s` | `2149 MB` | **`16.55×`** |
 
-![Stage Breakdown](docs/figures/stage_breakdown.png)
+![Stage Breakdown](figures/stage_breakdown.png)
 
 ---
 
 ## 2. Sliding-Window Parameter Grid Sweep (`results/sweep.csv`)
 
-![Pareto Sweep](docs/figures/pareto_sweep.png)
+![Pareto Sweep](figures/pareto_sweep.png)
 
 | Overlap | `sw_batch_size` | Median SW Latency (ms) | IQR (ms) | Mean SW Latency (ms) | Peak VRAM (MB) | Held-Out Mean Dice ± SD | Pareto-Optimal |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

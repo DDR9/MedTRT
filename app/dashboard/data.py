@@ -27,7 +27,7 @@ from scipy import stats as sps
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = Path(os.environ.get("MEDTRT_RESULTS_DIR", ROOT / "results"))
 FIGURES_DIR = ROOT / "docs" / "figures"
-ORIGINAL_CLAIMS_FILE = ROOT / "docs" / "original_claims.json"
+ORIGINAL_CLAIMS_FILE = ROOT / "docs" / "historical_baseline_claims.json"
 GPU_LOCK = ROOT / "results" / ".gpu_busy"
 
 STAGES: Tuple[str, ...] = ("load", "h2d", "preprocess", "sw_network", "sw_aggregate", "postprocess")

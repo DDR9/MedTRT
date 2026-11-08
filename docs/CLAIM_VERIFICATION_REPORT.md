@@ -1,6 +1,6 @@
 # MedTRT Scientific Claim Verification & Evidence Audit Report
 
-**Document Role:** Internal Claim-Evidence Matrix (Deliverable 5, Master Task Part XVIII)  
+**Document Role:** Reproducible Claim-to-Artifact Verification Matrix (`docs/CLAIM_VERIFICATION_REPORT.md`)  
 **Code Fingerprint:** `e9d4f060aaf1b130` (verified identical across all 29 artifacts in `results/`)  
 **Engine Fingerprint:** `28d585aaed46e401`  
 **Automated Verifier Command:** `python -m medtrt.verify_claims` (`14/14` checks passing)  

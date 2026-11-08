@@ -395,7 +395,7 @@ def write_all_markdown_reports(
     post_vram_red = post_bench["speedups"]["vram_reduction_vs_monai_gpu_trilinear"]
 
     # =========================================================================
-    # 1. PHASE 3: reports/GPU_PROFILING_REPORT.md
+    # 1. PHASE 3: docs/GPU_PROFILING_STUDY.md
     # =========================================================================
     rep_h = timeline["repeats"][-1]
     rep_o = timeline["optimized_repeats"][-1]
@@ -415,7 +415,7 @@ def write_all_markdown_reports(
             f"`{bench[k]['peak_vram_mb']['max']:.0f}`",
         ])
 
-    gpu_profiling_md = f"""# Phase 3 — GPU Profiling, NVTX Timeline Analysis & Bottleneck Decomposition
+    gpu_profiling_md = f"""# GPU Profiling, NVTX Timeline Analysis & Amdahl Bottleneck Decomposition (`docs/GPU_PROFILING_STUDY.md`)
 
 > **Scope & Hardware:** All measurements were recorded on an **{env['gpu_model']}** (`{env['compute_capability']}`, `{env['vram_gb']} GB` GDDR7, Driver `{env['driver_version']}`, CUDA `{env['cuda_runtime_version']}`, TensorRT `{env['tensorrt_version']}`). Stage boundaries are bracketed by synchronized `torch.cuda.Event(enable_timing=True)` pairs inside `torch.cuda.nvtx.range_push/pop` markers (`src/medtrt/timing.py`) and cross-checked against wall-clock `time.perf_counter()`.
 
@@ -432,7 +432,7 @@ Every full-volume pass is decomposed into 6 mutually exclusive, hardware-timed N
 5. **`sw_aggregate`**: 3D Gaussian importance-map weighting and overlapping patch accumulation (`_sw_total - sw_network`).
 6. **`postprocess`**: Softmax activation, inverse spatial resampling from `(1.5, 1.5, 2.0) mm` back to native patient CT geometry, argmax discretization (`uint8`), and D2H mask completion.
 
-![Stage Latency Breakdown](../docs/figures/stage_breakdown.png)
+![Stage Latency Breakdown](figures/stage_breakdown.png)
 
 ---
 
@@ -476,7 +476,7 @@ $$S_{{\\text{{max}}}} = \\frac{{1}}{{s + \\frac{{p}}{{S_{{\\text{{net}}}}}}}} \\
 
 ## 4. Before vs. After Optimization Timeline (`spleen_6`, `512 × 512 × 135`)
 
-![Stage Timeline Comparison](../docs/figures/nsys_trace.png)
+![Stage Timeline Comparison](figures/nsys_trace.png)
 
 {_md_table(
     ["Stage", "Before: `trt_fp16` Host Path (ms)", "After: `trt_fp16_optimized` Custom CUDA (ms)", "Stage Speedup (×)"],
@@ -503,10 +503,10 @@ $$S_{{\\text{{max}}}} = \\frac{{1}}{{s + \\frac{{p}}{{S_{{\\text{{net}}}}}}}} \\
 3. **Host-to-Device Pageable vs. Pinned Asynchronous DMA (`results/benchmark_preprocessing.json`):**
    Transferring the `512 × 512 × 135` (`141.56 MB`) volume from pageable host memory takes `{pre_bench['ingestion']['h2d_only_pageable']['cuda_event_ms']['median']:.2f} ms`, whereas pre-pinned host memory (`pin_memory()`) with `non_blocking=True` transfers in **`{pre_bench['ingestion']['h2d_only_pinned_async']['cuda_event_ms']['median']:.2f} ms`** (**`{pre_bench['ingestion']['pinned_vs_pageable_speedup']:.2f}×` faster**, achieving `~24.8 GB/s` over PCIe Gen4/Gen5).
 """
-    _save_both("reports/GPU_PROFILING_REPORT.md", gpu_profiling_md)
+    _save_both("docs/GPU_PROFILING_STUDY.md", gpu_profiling_md)
 
     # =========================================================================
-    # 2. PHASE 4: reports/CUDA_KERNEL_STUDY.md
+    # 2. PHASE 4: docs/CUDA_KERNEL_STUDY.md
     # =========================================================================
     k_meta = correctness["cuda_hardware_kernels"]["kernels"]
     k_rows = []
@@ -534,7 +534,7 @@ $$S_{{\\text{{max}}}} = \\frac{{1}}{{s + \\frac{{p}}{{S_{{\\text{{net}}}}}}}} \\
             f"`{r['fused_post_pytorch_ms']:.2f}` → `{r['fused_post_cuda_ms']:.2f}` (**`{r['fused_post_speedup']:.1f}×`**)",
         ])
 
-    cuda_study_md = f"""# Phase 4 — Custom CUDA C++ Medical Image Kernels: Design, Hardware Occupancy & Benchmark Study
+    cuda_study_md = f"""# Custom CUDA C++17 Medical Image Kernels: Design, Occupancy & Benchmark Study (`docs/CUDA_KERNEL_STUDY.md`)
 
 > **Implementation Files:**
 > - CUDA C++17 Source: [`cuda/medical_kernels.cu`](../cuda/medical_kernels.cu)
@@ -680,7 +680,7 @@ All 9 kernels are compiled directly to native Blackwell SASS (`sass_binary_versi
 
 ## 4. Scaling Across 3D CT Volume Sizes (`4.19M` to `50.33M` Voxels)
 
-![CUDA Kernel Scaling](../docs/figures/cuda_kernel_scaling.png)
+![CUDA Kernel Scaling](figures/cuda_kernel_scaling.png)
 
 {_md_table(["Volume Shape", "Voxels", "HU Norm: PyTorch → CUDA `float4`", "3D Trilinear: PyTorch → CUDA", "3D Nearest `uint8`: PyTorch → CUDA", "Voxel Count: PyTorch → CUDA", "Fused Postprocess: PyTorch → CUDA"], scale_rows)}
 
@@ -693,10 +693,10 @@ All 9 kernels are compiled directly to native Blackwell SASS (`sass_binary_versi
 - **Empty Mask Reduction:** All-zero `(1, 128, 128, 32)` `uint8` volume returns exact count `{correctness['custom_cuda_edge_cases']['empty_mask_voxel_count']}`.
 - **Discrete Label Integrity:** Nearest-neighbor `uint8` resampling preserves binary label set `{correctness['custom_cuda_edge_cases']['nearest_neighbor_unique_labels']}` without fractional interpolation artifacts.
 """
-    _save_both("reports/CUDA_KERNEL_STUDY.md", cuda_study_md)
+    _save_both("docs/CUDA_KERNEL_STUDY.md", cuda_study_md)
 
     # =========================================================================
-    # 3. PHASE 5: reports/TENSORRT_PRECISION_STUDY.md
+    # 3. PHASE 5: docs/TENSORRT_PRECISION_STUDY.md
     # =========================================================================
     prec_cmp = correctness["backend_precision_comparison"]
     prec_rows = []
@@ -735,7 +735,7 @@ All 9 kernels are compiled directly to native Blackwell SASS (`sass_binary_versi
         ])
 
     fold_probe = probes["fold_effect"]
-    trt_precision_md = f"""# Phase 5 — TensorRT 10.x Compilation, Dynamic Optimization Profiles & Numerical Precision Study
+    trt_precision_md = f"""# TensorRT 10.x Compilation, Dynamic Profiles & FP16 Numerical Stability Study (`docs/TENSORRT_PRECISION_STUDY.md`)
 
 > **Implementation Files:**
 > - Model Loader & `ConvTranspose3d+BatchNorm3d` FP64 Folder: [`src/medtrt/model.py`](../src/medtrt/model.py)
@@ -867,10 +867,10 @@ Both `spleen_unet_fp32.engine` (`22.97 MB`) and `spleen_unet_fp16.engine` (`13.7
 
 Across all `{probes['fp16_numerics']['sliding_window_calls']}` sliding-window batches of all 9 held-out CT volumes (`results/probes.json`), BN-folded TensorRT FP16 achieves a mean absolute logit difference of **`{probes['fp16_numerics']['mean_abs_logit_diff']:.5f}`** (on logits up to `{probes['fp16_numerics']['reference_logit_abs_max']:.1f}`), a mean probability MAE of **`{probes['fp16_numerics']['probability_mae']:.6f}`**, and a near-zero foreground margin shift of **`{probes['fp16_numerics']['mean_foreground_margin_shift']:+.5f}`** (`{probes['fp16_numerics']['window_voxels_background_to_foreground']}` window voxels flipped BG→FG vs. `{probes['fp16_numerics']['window_voxels_foreground_to_background']}` flipped FG→BG).
 """
-    _save_both("reports/TENSORRT_PRECISION_STUDY.md", trt_precision_md)
+    _save_both("docs/TENSORRT_PRECISION_STUDY.md", trt_precision_md)
 
     # =========================================================================
-    # 4. PHASE 6: reports/MEDICAL_VALIDATION_REPORT.md
+    # 4. PHASE 6: docs/MEDICAL_VALIDATION_STUDY.md
     # =========================================================================
     val_summary_rows = []
     for k in ("pytorch_fp32_strict", "pytorch_fp32", "pytorch_amp", "pytorch_fp16", "trt_fp32", "trt_fp16_unfolded", "trt_fp16", "trt_fp16_gpu", "trt_fp16_cuda", "trt_fp16_optimized", "trt_fp16_nn"):
@@ -922,7 +922,7 @@ Across all `{probes['fp16_numerics']['sliding_window_calls']}` sliding-window ba
             f"`{v['n_positive']}/{v['n']}`",
         ])
 
-    med_val_md = f"""# Phase 6 — Quantitative Medical Image Segmentation & Volumetric Validation Report
+    med_val_md = f"""# Quantitative Medical Image Segmentation & Volumetric Validation Study (`docs/MEDICAL_VALIDATION_STUDY.md`)
 
 > **Regulatory & Scientific Scope Disclaimer:**
 > MedTRT is an experimental research platform evaluated on the public **Medical Segmentation Decathlon `Task09_Spleen`** validation split ($n = 9$ held-out CT scans). It is **not FDA-cleared, not clinically validated, and not certified for diagnostic or intraoperative decision-making**. Because the upstream MONAI bundle (`v0.6.1`) selected its checkpoint using validation Dice on this split, absolute accuracy metrics versus ground truth represent optimistic validation estimates; cross-backend equivalence metrics (`TensorRT FP16` vs. `PyTorch Strict FP32`) are exact paired comparisons on identical inputs.
@@ -939,7 +939,7 @@ For each 3D CT scan with voxel-to-world $4 \\times 4$ affine matrix $A$ (extract
 3. **Physical Boundary Surface Distances (`HD95` and `ASSD` in $\\text{{mm}}$):**
    Computed in physical millimeters accounting for anisotropic slice thickness $(s_x, s_y, s_z)$ via `monai.metrics.compute_hausdorff_distance(..., percentile=95.0, spacing=spacing_xyz)` and `compute_average_surface_distance(..., symmetric=True, spacing=spacing_xyz)`.
 
-![Segmentation Metrics Distribution](../docs/figures/segmentation_metrics_distribution.png)
+![Segmentation Metrics Distribution](figures/segmentation_metrics_distribution.png)
 
 ---
 
@@ -953,7 +953,7 @@ For each 3D CT scan with voxel-to-world $4 \\times 4$ affine matrix $A$ (extract
 
 {_md_table(["Case ID", "Native Matrix", "Voxel Spacing (mm)", "Dice", "IoU", "Sens", "Prec", "HD95 (mm)", "ASSD (mm)", "V_GT (cm³)", "V_pred (cm³)", "Signed Vol Error cm³ (%)"], per_case_rows)}
 
-![Volumetric Scatter and Error](../docs/figures/volumetric_scatter_and_error.png)
+![Volumetric Scatter and Error](figures/volumetric_scatter_and_error.png)
 
 ---
 
@@ -968,7 +968,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 
 ### 4.2 Cross-Backend Equivalence vs. Strict IEEE FP32 Reference ($V_{{\\text{{backend}}}} - V_{{\\text{{FP32\\_strict}}}}$)
 
-![Bland-Altman Agreement](../docs/figures/bland_altman.png)
+![Bland-Altman Agreement](figures/bland_altman.png)
 
 {_md_table(["Profile", "Mean Dice", "Mean `|ΔDice|`", "Max `|ΔDice|`", "Vol Bias ± SD (cm³)", "Bias 95% CI (cm³)", "95% LoA (cm³)", "Paired t-test p", "Cases > FP32"], ba_rows)}
 
@@ -977,10 +977,10 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 2. **BN-Folded TensorRT FP16 (`trt_fp16` and `trt_fp16_cuda`)** achieves `Mean |ΔDice| = 0.000014` (`Max |ΔDice| = 0.000029`) and a cross-backend volume bias of **`+0.0010 ± 0.0194 cm³`** (`95% LoA [-0.037, +0.039] cm³`, `MAE = 0.0145 cm³`, `0.0004%` of organ volume, `p = 0.885`), proving that FP16 quantization + custom CUDA C++ pre/postprocessing introduces virtually zero volumetric or geometric drift.
 3. **Pareto Fast Profile (`trt_fp16_optimized`, `overlap=0.25, B=8`)** reduces sliding-window overlap from `0.50` to `0.25` (cutting 3D UNet patch evaluations by `3.2×`), maintaining `Mean Dice = 0.964778` (`Mean |ΔDice| = 0.001669`) and an unbiased cross-backend volume difference of `+0.12 ± 1.18 cm³` (`p = 0.769`).
 """
-    _save_both("reports/MEDICAL_VALIDATION_REPORT.md", med_val_md)
+    _save_both("docs/MEDICAL_VALIDATION_STUDY.md", med_val_md)
 
     # =========================================================================
-    # 5. PHASE 7: reports/ANATOMICAL_FAILURE_ANALYSIS.md
+    # 5. PHASE 7: docs/ANATOMICAL_FAILURE_ANALYSIS.md
     # =========================================================================
     w1, w2 = failures["worst_cases"][0], failures["worst_cases"][1]
     cc = failures["cross_case"]
@@ -992,7 +992,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
             ["`HD95 (mm)` vs. Ground-Truth Organ Volume ($V_{\\text{GT}}$)", f"`{cc['spearman_hd95_vs_gt_volume']['rho']:+.3f}`", f"`{cc['spearman_hd95_vs_gt_volume']['p']:.3f}`", "Weak positive association; large spleens (`spleen_59`, `spleen_63`) have larger absolute capsule surface area."],
         ]
     )
-    fail_md = f"""# Phase 7 — Anatomical & Geometric Failure Mode Analysis
+    fail_md = f"""# Anatomical & Geometric Boundary Error Analysis (`docs/ANATOMICAL_FAILURE_ANALYSIS.md`)
 
 > **Methodology:** Evaluates per-case error distributions across the 9 held-out CT scans (`results/failure_analysis.json`, `results/eval_trt_fp16_cuda.csv`), decomposing errors into False Positives (over-segmentation), False Negatives (under-segmentation), polar slice error concentration (superior/inferior organ domes), and physical surface distances (`HD95`, `ASSD`). Distinguishes measured statistical properties from anatomical boundary interpretations.
 
@@ -1015,7 +1015,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 
 ## 2. Detailed Case Study 1: `{w1['case_id']}` (Rank 1 Lowest Dice = `{w1['dice']:.4f}`, Highest HD95 = `{w1['hd95_mm']:.2f} mm`)
 
-![Failure Case 1: spleen_56](../docs/figures/failure_case_1.png)
+![Failure Case 1: spleen_56](figures/failure_case_1.png)
 
 - **Scan Geometry:** `{w1['voxel_spacing_mm']}` mm spacing (`512 × 512 × 33`), z-anisotropy ratio **`{w1['anisotropy_ratio']}:1`**, smallest ground-truth spleen volume in the cohort (**`{w1['v_gt_cm3']:.2f} cm³`** vs. `286.73 cm³` cohort mean).
 - **Voxel Error Decomposition:**
@@ -1033,7 +1033,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 
 ## 3. Detailed Case Study 2: `{w2['case_id']}` (Rank 2 Lowest Dice = `{w2['dice']:.4f}`, Hilar Boundary Disagreement)
 
-![Failure Case 2: spleen_62](../docs/figures/failure_case_2.png)
+![Failure Case 2: spleen_62](figures/failure_case_2.png)
 
 - **Scan Geometry:** `{w2['voxel_spacing_mm']}` mm spacing (`512 × 512 × 80`), z-anisotropy ratio **`{w2['anisotropy_ratio']}:1`**, ground-truth volume **`{w2['v_gt_cm3']:.2f} cm³`**.
 - **Voxel Error Decomposition:**
@@ -1051,7 +1051,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 
 {corr_table}
 """
-    _save_both("reports/ANATOMICAL_FAILURE_ANALYSIS.md", fail_md)
+    _save_both("docs/ANATOMICAL_FAILURE_ANALYSIS.md", fail_md)
 
     # =========================================================================
     # 6. PHASE 13 DELIVERABLES:
@@ -1060,9 +1060,9 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
     #    - BENCHMARK_RESULTS.md
     #    - VALIDATION_RESULTS.md
     #    - PROJECT_ARCHITECTURE.md
-    #    - docs/RESUME_ENGINEERING_EVIDENCE.md
+    #    - docs/KEY_FINDINGS_AND_FAQ.md
     # =========================================================================
-    nvidia_report_md = f"""# NVIDIA Accelerated Computing & Performance Engineering Report
+    nvidia_report_md = f"""# GPU Systems & Performance Engineering Study (`docs/GPU_SYSTEMS_ENGINEERING.md`)
 
 > **Platform:** `{env['gpu_model']}` (`{env['architecture']}`, `{env['compute_capability']}`, `{env['vram_gb']} GB` GDDR7, `60 SMs`) | Driver `{env['driver_version']}` | CUDA `{env['cuda_runtime_version']}` | cuDNN `{env['cudnn_version']}` | TensorRT `{env['tensorrt_version']}`
 
@@ -1161,7 +1161,7 @@ We engineered 9 custom CUDA C++17 kernels compiled via NVRTC (`nvrtc64_120_0.dll
     ]
 )}
 """
-    _save_both("NVIDIA_ENGINEERING_REPORT.md", nvidia_report_md)
+    _save_both("docs/GPU_SYSTEMS_ENGINEERING.md", nvidia_report_md)
 
     req_table = _md_table(
         ["Requirement ID", "Verification Requirement Description", "Verification Test Module & Function", "Acceptance Criterion", "Status"],
@@ -1177,7 +1177,7 @@ We engineered 9 custom CUDA C++17 kernels compiled via NVRTC (`nvrtc64_120_0.dll
             ["`REQ-DOC-01`", "Automated audit of published claims, provenance hashes, and clinical scope language", "`tests/test_published_results.py` (`src/medtrt/verify_claims.py`)", "10/10 automated integrity checks pass", "**PASS**"],
         ]
     )
-    medtronic_report_md = f"""# Medtronic Biomedical Imaging, Quantitative Validation & Verification Report
+    medtronic_report_md = f"""# Biomedical Imaging Validation & Software Traceability Report (`docs/BIOMEDICAL_VERIFICATION_REPORT.md`)
 
 > **Clinical Scope & Intended Use Statement:**
 > MedTRT is a quantitative 3D medical imaging research prototype evaluated on the Medical Segmentation Decathlon `Task09_Spleen` dataset ($n = 9$ validation CT volumes). It is **not FDA-approved, not CE-marked, and not certified for clinical diagnosis or surgical navigation**. All engineering verification controls follow medical software verification principles (traceability, deterministic reproducibility, physical coordinate validation, and statistical agreement bounds).
@@ -1225,7 +1225,7 @@ The Streamlit workstation (`streamlit run app/viewer.py`) provides:
 - **Side-by-Side Cross-Backend Comparison & Difference-Mask Overlay:** Visualizes voxel-by-voxel disagreement (`|Pred_A - Pred_B|`) between any two backends (e.g., `TensorRT FP16` vs. `PyTorch Strict FP32`) and against ground truth (`Green = GT`, `Red = Pred`, `Yellow = Agreement`).
 - **Ground-Truth Safeguard:** Automatically disables ground-truth metrics when inspecting unlabeled volumes (`imagesTs/`) so silent zero-arrays are never reported.
 """
-    _save_both("MEDTRONIC_ENGINEERING_REPORT.md", medtronic_report_md)
+    _save_both("docs/BIOMEDICAL_VERIFICATION_REPORT.md", medtronic_report_md)
 
     # =========================================================================
     # 7. BENCHMARK_RESULTS.md & VALIDATION_RESULTS.md & PROJECT_ARCHITECTURE.md
@@ -1254,7 +1254,7 @@ The Streamlit workstation (`streamlit run app/viewer.py`) provides:
             f"**`{e2e_host / s_e2e['median']:.2f}×`**",
         ])
 
-    benchmark_results_md = f"""# MedTRT Complete GPU Benchmark Results (`BENCHMARK_RESULTS.md`)
+    benchmark_results_md = f"""# MedTRT Complete GPU Benchmark Results (`docs/BENCHMARK_RESULTS.md`)
 
 > **Hardware & Provenance:** `{env['gpu_model']}` (`{env['vram_gb']} GB` VRAM, `{env['compute_capability']}`), Driver `{env['driver_version']}`, CUDA `{env['cuda_runtime_version']}`, TensorRT `{env['tensorrt_version']}`, PyTorch `{env['pytorch_version']}`, MONAI `{env['monai_version']}`. All measurements come from `results/bench_*.json` and `results/benchmark_*.json`.
 
@@ -1305,9 +1305,9 @@ The Streamlit workstation (`streamlit run app/viewer.py`) provides:
   - `trt_fp16_cuda` (Custom CUDA C++ register-affine kernels, `overlap=0.5, B=4`): **`{b_cuda['peak_vram_mb']['max']:.1f} MB`** (**`{b_trt_gpu['peak_vram_mb']['max'] / b_cuda['peak_vram_mb']['max']:.2f}×` lower peak VRAM**)
   - `trt_fp16_optimized` (Custom CUDA C++ register-affine kernels, `overlap=0.25, B=8`): **`{b_opt['peak_vram_mb']['max']:.1f} MB`** (`7.0%` of 16 GB VRAM)
 """
-    _save_both("BENCHMARK_RESULTS.md", benchmark_results_md)
+    _save_both("docs/BENCHMARK_RESULTS.md", benchmark_results_md)
 
-    validation_results_md = f"""# MedTRT Complete Quantitative Validation Results (`VALIDATION_RESULTS.md`)
+    validation_results_md = f"""# MedTRT Complete Quantitative Validation Results (`docs/VALIDATION_RESULTS.md`)
 
 > **Dataset:** Medical Segmentation Decathlon `Task09_Spleen` ($n = 9$ held-out CT scans reserved by MONAI bundle `spleen_ct_segmentation` v0.6.1). All numbers are generated directly from `results/eval_*.csv`, `results/validation.csv`, `results/bland_altman.json`, and `results/failure_analysis.json`.
 
@@ -1345,9 +1345,9 @@ The Streamlit workstation (`streamlit run app/viewer.py`) provides:
     ]
 )}
 """
-    _save_both("VALIDATION_RESULTS.md", validation_results_md)
+    _save_both("docs/VALIDATION_RESULTS.md", validation_results_md)
 
-    arch_md = """# MedTRT System Architecture & Reproducible Pipeline Guide (`PROJECT_ARCHITECTURE.md`)
+    arch_md = """# MedTRT System Architecture & Reproducible Pipeline Guide (`docs/ARCHITECTURE.md`)
 
 ## 1. End-to-End System Architecture
 
@@ -1434,9 +1434,9 @@ medtrt/
 └── docs/                              # Engineering audit, technical paper, resume evidence, and 12 generated figures
 ```
 """
-    _save_both("PROJECT_ARCHITECTURE.md", arch_md)
+    _save_both("docs/ARCHITECTURE.md", arch_md)
 
-    resume_md = f"""# Phase 14 — Quantified Engineering Evidence & Interview Defense Guide (`docs/RESUME_ENGINEERING_EVIDENCE.md`)
+    resume_md = f"""# Phase 14 — Quantified Engineering Evidence & Interview Defense Guide (`docs/KEY_FINDINGS_AND_FAQ.md`)
 
 > Every metric below is backed by reproducible benchmark artifacts (`results/bench_*.json`, `results/cohort_41_volumes.json`, `results/benchmark_*.json`, `results/eval_*.csv`, `results/bland_altman.json`) measured on an **NVIDIA GeForce RTX 5080 Laptop GPU** (`sm_120`, 16 GB GDDR7, CUDA 12.8, TensorRT 10.16.1.11) and audited by our 65-test verification suite (`pytest tests/` & `python -m medtrt.verify_claims`).
 
@@ -1485,9 +1485,9 @@ medtrt/
 ### Q2: How did you prove that the original `+1.68 cm³` volume shift in TensorRT FP16 was an export artifact rather than an unavoidable limitation of FP16 segmentation?
 - **Answer:** We inspected the exported ONNX graph and every intermediate layer's activation distribution. PyTorch's ONNX exporter folds `Conv3d+BatchNorm3d` in the encoder but leaves `ConvTranspose3d+BatchNorm3d` unfused in the decoder. In `model.2.0.adn.N`, `running_mean = 57.62` and the affine shift is `-81.79`. Because IEEE-754 FP16 has a 10-bit mantissa, its quantization step in $[64, 128)$ is $\\text{{ULP}} = 0.0625$. Quantizing the pre-BN activation and shift to FP16 before subtracting caused catastrophic cancellation that shifted background logit Ch0 by `-0.159` and dilated the spleen mask on all 9/9 scans. Folding `BatchNorm3d` into `ConvTranspose3d` in FP64 prior to export eliminated the large intermediate offset, reducing logit error by `35.6×` and volume bias to `+0.0010 cm³` (`p = 0.885`).
 """
-    _save_both("docs/RESUME_ENGINEERING_EVIDENCE.md", resume_md)
+    _save_both("docs/KEY_FINDINGS_AND_FAQ.md", resume_md)
 
-    # Also copy docs/ENGINEERING_AUDIT.md and docs/figures/* to WORKSPACE_ROOT/docs/
+    # Also copy docs/BASELINE_AUDIT_REPORT.md and docs/figures/* to WORKSPACE_ROOT/docs/
     if (MEDTRT_ROOT / "docs" / "ENGINEERING_AUDIT.md").exists():
         shutil.copyfile(MEDTRT_ROOT / "docs" / "ENGINEERING_AUDIT.md", WORKSPACE_ROOT / "docs" / "ENGINEERING_AUDIT.md")
     (WORKSPACE_ROOT / "docs" / "figures").mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-# Medtronic Biomedical Imaging, Quantitative Validation & Verification Report
+# Biomedical Imaging Validation & Software Traceability Report (`docs/BIOMEDICAL_VERIFICATION_REPORT.md`)
 
 > **Clinical Scope & Intended Use Statement:**
 > MedTRT is a quantitative 3D medical imaging research prototype evaluated on the Medical Segmentation Decathlon `Task09_Spleen` dataset ($n = 9$ validation CT volumes). It is **not FDA-approved, not CE-marked, and not certified for clinical diagnosis or surgical navigation**. All engineering verification controls follow medical software verification principles (traceability, deterministic reproducibility, physical coordinate validation, and statistical agreement bounds).

@@ -1,4 +1,4 @@
-# MedTRT System Architecture & Reproducible Pipeline Guide (`PROJECT_ARCHITECTURE.md`)
+# MedTRT System Architecture & Reproducible Pipeline Guide (`docs/ARCHITECTURE.md`)
 
 ## 1. End-to-End System Architecture
 

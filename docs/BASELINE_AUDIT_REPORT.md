@@ -1,4 +1,4 @@
-# Phase 1 Engineering Audit & Baseline Reproduction (`docs/ENGINEERING_AUDIT.md`)
+# Initial Baseline Audit & Root-Cause Bottleneck Analysis (`docs/BASELINE_AUDIT_REPORT.md`)
 
 > **Audit Date:** 2026-11-05  
 > **Target Repository:** `medtrt/` (and legacy prototype `medical-ai/`)  

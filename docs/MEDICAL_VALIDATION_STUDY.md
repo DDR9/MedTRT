@@ -1,4 +1,4 @@
-# Phase 6 — Quantitative Medical Image Segmentation & Volumetric Validation Report
+# Quantitative Medical Image Segmentation & Volumetric Validation Study (`docs/MEDICAL_VALIDATION_STUDY.md`)
 
 > **Regulatory & Scientific Scope Disclaimer:**
 > MedTRT is an experimental research platform evaluated on the public **Medical Segmentation Decathlon `Task09_Spleen`** validation split ($n = 9$ held-out CT scans). It is **not FDA-cleared, not clinically validated, and not certified for diagnostic or intraoperative decision-making**. Because the upstream MONAI bundle (`v0.6.1`) selected its checkpoint using validation Dice on this split, absolute accuracy metrics versus ground truth represent optimistic validation estimates; cross-backend equivalence metrics (`TensorRT FP16` vs. `PyTorch Strict FP32`) are exact paired comparisons on identical inputs.
@@ -15,7 +15,7 @@ For each 3D CT scan with voxel-to-world $4 \times 4$ affine matrix $A$ (extracte
 3. **Physical Boundary Surface Distances (`HD95` and `ASSD` in $\text{mm}$):**
    Computed in physical millimeters accounting for anisotropic slice thickness $(s_x, s_y, s_z)$ via `monai.metrics.compute_hausdorff_distance(..., percentile=95.0, spacing=spacing_xyz)` and `compute_average_surface_distance(..., symmetric=True, spacing=spacing_xyz)`.
 
-![Segmentation Metrics Distribution](../docs/figures/segmentation_metrics_distribution.png)
+![Segmentation Metrics Distribution](figures/segmentation_metrics_distribution.png)
 
 ---
 
@@ -51,7 +51,7 @@ For each 3D CT scan with voxel-to-world $4 \times 4$ affine matrix $A$ (extracte
 | `spleen_8` | `512×512×31` | `(0.79, 0.79, 7.50)` | `0.9734` | `0.9481` | `0.9649` | `0.9821` | `1.57` | `0.24` | `501.55` | `492.77` | `-8.78` (`-1.75%`) |
 | `spleen_9` | `512×512×41` | `(0.74, 0.74, 5.00)` | `0.9708` | `0.9432` | `0.9631` | `0.9786` | `1.49` | `0.30` | `269.15` | `264.91` | `-4.24` (`-1.57%`) |
 
-![Volumetric Scatter and Error](../docs/figures/volumetric_scatter_and_error.png)
+![Volumetric Scatter and Error](figures/volumetric_scatter_and_error.png)
 
 ---
 
@@ -66,7 +66,7 @@ We report two distinct Bland–Altman analyses so model segmentation error is ne
 
 ### 4.2 Cross-Backend Equivalence vs. Strict IEEE FP32 Reference ($V_{\text{backend}} - V_{\text{FP32\_strict}}$)
 
-![Bland-Altman Agreement](../docs/figures/bland_altman.png)
+![Bland-Altman Agreement](figures/bland_altman.png)
 
 | Profile | Mean Dice | Mean `|ΔDice|` | Max `|ΔDice|` | Vol Bias ± SD (cm³) | Bias 95% CI (cm³) | 95% LoA (cm³) | Paired t-test p | Cases > FP32 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

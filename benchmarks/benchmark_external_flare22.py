@@ -24,6 +24,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -53,8 +54,8 @@ from medtrt.profiles import (
     get_profile,
 )
 
-GDRIVE_ROOT = Path(r"$MEDTRT_DATASETS_DIR")
-FLARE22_DIR = GDRIVE_ROOT / "FLARE22_External_Cohort"
+GDRIVE_ROOT = Path(os.environ.get("MEDTRT_DATASETS_DIR", MEDTRT_ROOT / "data"))
+FLARE22_DIR = Path(os.environ.get("MEDTRT_FLARE22_DIR", GDRIVE_ROOT / "FLARE22_External_Cohort"))
 
 
 def _ci95_t(values: List[float]) -> Tuple[float, float, float, float]:

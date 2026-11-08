@@ -1,4 +1,4 @@
-# Phase 4 — Custom CUDA C++ Medical Image Kernels: Design, Hardware Occupancy & Benchmark Study
+# Custom CUDA C++17 Medical Image Kernels: Design, Occupancy & Benchmark Study (`docs/CUDA_KERNEL_STUDY.md`)
 
 > **Implementation Files:**
 > - CUDA C++17 Source: [`cuda/medical_kernels.cu`](../cuda/medical_kernels.cu)
@@ -71,7 +71,7 @@ All 9 kernels are compiled directly to native Blackwell SASS (`sass_binary_versi
 
 ## 4. Scaling Across 3D CT Volume Sizes (`4.19M` to `50.33M` Voxels)
 
-![CUDA Kernel Scaling](../docs/figures/cuda_kernel_scaling.png)
+![CUDA Kernel Scaling](figures/cuda_kernel_scaling.png)
 
 | Volume Shape | Voxels | HU Norm: PyTorch → CUDA `float4` | 3D Trilinear: PyTorch → CUDA | 3D Nearest `uint8`: PyTorch → CUDA | Voxel Count: PyTorch → CUDA | Fused Postprocess: PyTorch → CUDA |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |

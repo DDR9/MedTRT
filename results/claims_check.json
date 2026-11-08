@@ -73,7 +73,7 @@
   {
    "check": "technical paper & PDF study audit",
    "passed": true,
-   "detail": "MEDTRT_TECHNICAL_PAPER (.md=19 KB, .tex=84 KB, .pdf=3918 KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data"
+   "detail": "TECHNICAL_PAPER (.md=19 KB, .tex=84 KB, .pdf=3918 KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data"
   }
  ]
 }

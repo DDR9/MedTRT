@@ -1,4 +1,4 @@
-# NVIDIA Accelerated Computing & Performance Engineering Report
+# GPU Systems & Performance Engineering Study (`docs/GPU_SYSTEMS_ENGINEERING.md`)
 
 > **Platform:** `NVIDIA GeForce RTX 5080 Laptop GPU` (`NVIDIA Blackwell`, `12.0 (sm_120)`, `15.92 GB` GDDR7, `60 SMs`) | Driver `591.44` | CUDA `12.8` | cuDNN `9.19.0` | TensorRT `10.16.1.11`
 
@@ -15,7 +15,7 @@
 | **FP16 Cross-Backend Numerical Drift** | `+1.6754 cm³` volume bias (`mean |Δlogit| = 0.1377`) | **`+0.0010 cm³`** volume bias (`mean |Δlogit| = 0.00387`) | **`35.6×` lower logit error**, **`620×` lower volume bias** | Analytical FP64 `ConvTranspose3d + BatchNorm3d` weight folding prior to ONNX/TensorRT export |
 | **Complete End-to-End 3D Volume Pipeline** | `3049.8 ms` (Strict FP32) / `2952.0 ms` (Default TF32) | **`96.26 ms`** (`overlap=0.5`) / **`68.88 ms`** (`overlap=0.25`) | **`30.7×`** (`overlap=0.5`) / **`42.9×`** (`overlap=0.25`) | Full-pipeline co-design: Mmap I/O + Custom CUDA C++ Pre/Post + TensorRT 10.16 FP16 + Pareto Windows |
 
-![Backend Latency and Speedup](docs/figures/backend_latency_speedup.png)
+![Backend Latency and Speedup](figures/backend_latency_speedup.png)
 
 ---
 
@@ -32,13 +32,13 @@ We engineered 9 custom CUDA C++17 kernels compiled via NVRTC (`nvrtc64_120_0.dll
 8. `count_nonzero_u8`: Two-level warp-shuffle (`__shfl_down_sync`) + shared-memory block reduction (`100.0%` occupancy, `36` regs).
 9. `sliding_window_gaussian_accumulate_f32`: Fused 3D Gaussian importance weighting and sliding-window accumulation (`66.7%` occupancy, `56` regs).
 
-![GPU Memory Comparison](docs/figures/gpu_memory_comparison.png)
+![GPU Memory Comparison](figures/gpu_memory_comparison.png)
 
 ---
 
 ## 3. Controlled One-Change-at-a-Time Ablation Study (`results/benchmark_end_to_end.json`)
 
-![Ablation Waterfall](docs/figures/ablation_waterfall.png)
+![Ablation Waterfall](figures/ablation_waterfall.png)
 
 | Ablation Rung | Median E2E (ms) | `sw_network` (ms) | `preprocess` (ms) | `postprocess` (ms) | Peak VRAM (MB) | Mean Dice | Cumulative Speedup vs. TF32 | Latency Reduction (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

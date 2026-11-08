@@ -1,4 +1,4 @@
-# MedTRT Complete Quantitative Validation Results (`VALIDATION_RESULTS.md`)
+# MedTRT Complete Quantitative Validation Results (`docs/VALIDATION_RESULTS.md`)
 
 > **Dataset:** Medical Segmentation Decathlon `Task09_Spleen` ($n = 9$ held-out CT scans reserved by MONAI bundle `spleen_ct_segmentation` v0.6.1). All numbers are generated directly from `results/eval_*.csv`, `results/validation.csv`, `results/bland_altman.json`, and `results/failure_analysis.json`.
 

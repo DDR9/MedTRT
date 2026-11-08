@@ -4,8 +4,9 @@
 >
 > Every number in this document is deterministically rendered from hardware-verified artifacts in `results/`. Run `python -m medtrt.verify_claims` to verify all `13/13` integrity, data-split, external-cohort, and TOST equivalence checks without requiring a GPU.
 
-📄 **Full Technical Manuscript:** [`docs/MEDTRT_TECHNICAL_PAPER.pdf`](docs/MEDTRT_TECHNICAL_PAPER.pdf) ([LaTeX Source](docs/MEDTRT_TECHNICAL_PAPER.tex) | [Markdown Version](docs/MEDTRT_TECHNICAL_PAPER.md))  
-🔍 **Claim & Evidence Audit:** [`docs/SCIENTIFIC_CLAIM_VERIFICATION_REPORT.md`](docs/SCIENTIFIC_CLAIM_VERIFICATION_REPORT.md) | [`docs/MANUSCRIPT_AND_README_CHANGE_SUMMARY.md`](docs/MANUSCRIPT_AND_README_CHANGE_SUMMARY.md)
+📄 **Full Technical Manuscript:** [`docs/TECHNICAL_PAPER.pdf`](docs/TECHNICAL_PAPER.pdf) ([LaTeX Source](docs/TECHNICAL_PAPER.tex) | [Markdown Version](docs/TECHNICAL_PAPER.md))  
+📚 **Engineering Guides & Studies:** [`docs/README.md`](docs/README.md) | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | [`docs/CUDA_KERNEL_STUDY.md`](docs/CUDA_KERNEL_STUDY.md) | [`docs/TENSORRT_PRECISION_STUDY.md`](docs/TENSORRT_PRECISION_STUDY.md)  
+🔍 **Benchmarks, Validation & Claim Audit:** [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) | [`docs/VALIDATION_RESULTS.md`](docs/VALIDATION_RESULTS.md) | [`docs/CLAIM_VERIFICATION_REPORT.md`](docs/CLAIM_VERIFICATION_REPORT.md)
 
 ---
 
@@ -170,7 +171,7 @@ and replace the `BatchNorm3d` module with `torch.nn.Identity()`. In `model.2.0`,
 | Timing Protocol | 3 untimed warm-up volumes; CUDA Event pairs (`enable_timing=True`) + synchronized `time.perf_counter()` wall-clock cross-check (max gap `0.26%`) |
 | Profiling Disclosure | Nsight Systems was not run for these results. NVTX ranges are in the code, and `--nsys` will use them when Nsight is installed, but every number here comes from CUDA events and wall-clock timers. |
 
-- **Statistical Design (Pass-Level Timing vs Patient-Level Accuracy/Equivalence):** Repeated benchmark passes (`90` timed passes = `10` repeats $\times$ `9` scans on GPU-path profiles; `18` timed passes = `2` repeats $\times$ `9` scans on CPU-bound host profiles in `results/bench_*.json`, with 90-pass host reference runs also archived in `docs/SCIENTIFIC_CLAIM_VERIFICATION_REPORT.md`) measure hardware timing stability for a fixed cohort. All segmentation accuracy metrics (`Dice`, `IoU`, `HD95`, `ASSD`, `NSD`), Bland-Altman limits of agreement, and paired **Two One-Sided Tests (TOST)** equivalence bounds are computed strictly at the **patient level** ($N = 9$ internal MSD patients, $N = 12$ external unseen `FLARE22` patients, and $N = 21$ pooled independent patients).
+- **Statistical Design (Pass-Level Timing vs Patient-Level Accuracy/Equivalence):** Repeated benchmark passes (`90` timed passes = `10` repeats $\times$ `9` scans on GPU-path profiles; `18` timed passes = `2` repeats $\times$ `9` scans on CPU-bound host profiles in `results/bench_*.json`, with 90-pass host reference runs also archived in `docs/CLAIM_VERIFICATION_REPORT.md`) measure hardware timing stability for a fixed cohort. All segmentation accuracy metrics (`Dice`, `IoU`, `HD95`, `ASSD`, `NSD`), Bland-Altman limits of agreement, and paired **Two One-Sided Tests (TOST)** equivalence bounds are computed strictly at the **patient level** ($N = 9$ internal MSD patients, $N = 12$ external unseen `FLARE22` patients, and $N = 21$ pooled independent patients).
 - **Important Note on Non-Additivity of Marginal Stage Medians:** Across heterogeneous CT volumes (`31` to `135` slices), the sum of marginal stage medians does not mathematically equal the median of the end-to-end sum ($\sum_k \text{median}(T_k) \neq \text{median}(\sum_k T_k)$). Furthermore, end-to-end latency includes all six stages: `ingest` (`load + h2d`), `preprocess`, `sw_network`, `sw_aggregate`, and `postprocess`. In `trt_fp16_cuda`, the marginal stage medians are `29.2 + 1.3 + 49.0 + 6.1 + 2.6 = 88.2 ms` compared to the `96.3 ms` median of end-to-end pass totals (and within single-case medians such as `spleen_59`, the stage medians sum to `24.8 + 1.3 + 54.3 + 6.7 + 2.1 = 89.2 ms` vs `89.7 ms` E2E).
 
 ---
@@ -428,12 +429,24 @@ medtrt/
 │   ├── viewer.py                        # Interactive tri-planar CT viewer with HU presets
 │   └── workstation.py                   # Multi-page clinical research workstation with FP32-vs-FP16 heatmaps
 ├── docs/
-│   ├── MEDTRT_TECHNICAL_PAPER.pdf       # Compiled 10-page publication-quality technical manuscript
-│   ├── MEDTRT_TECHNICAL_PAPER.tex       # Full LaTeX manuscript source
-│   ├── MEDTRT_TECHNICAL_PAPER.md        # Markdown version of the manuscript
-│   ├── SCIENTIFIC_CLAIM_VERIFICATION_REPORT.md
-│   ├── MANUSCRIPT_AND_README_CHANGE_SUMMARY.md
-│   └── figures/                         # All reproducible scientific figures
+│   ├── README.md                        # Documentation index & guided reading map
+│   ├── TECHNICAL_PAPER.pdf              # Compiled IEEE two-column technical manuscript
+│   ├── TECHNICAL_PAPER.tex              # Full LaTeX manuscript source
+│   ├── TECHNICAL_PAPER.md               # Markdown version of the technical manuscript
+│   ├── ARCHITECTURE.md                  # End-to-end system architecture & dataflow guide
+│   ├── BENCHMARK_RESULTS.md             # Complete 13-profile latency, sweep & VRAM tables
+│   ├── VALIDATION_RESULTS.md            # 10-metric segmentation, Bland-Altman & TOST tables
+│   ├── GPU_SYSTEMS_ENGINEERING.md       # GPU systems, NVRTC CUDA kernels & Amdahl analysis
+│   ├── GPU_PROFILING_STUDY.md           # Six-stage NVTX/CUDA Event timeline decomposition
+│   ├── CUDA_KERNEL_STUDY.md             # 9 custom CUDA C++17 kernels & sm_120 occupancy study
+│   ├── TENSORRT_PRECISION_STUDY.md      # Analytical FP64 ConvTranspose3d+BN folding study
+│   ├── MEDICAL_VALIDATION_STUDY.md      # Physical volumetry & cross-backend equivalence study
+│   ├── ANATOMICAL_FAILURE_ANALYSIS.md   # Polar-dome & hilar boundary error analysis
+│   ├── BIOMEDICAL_VERIFICATION_REPORT.md# Requirements traceability & software verification
+│   ├── CLAIM_VERIFICATION_REPORT.md     # Claim-to-artifact reconciliation & audit matrix
+│   ├── BASELINE_AUDIT_REPORT.md         # Root-cause audit of initial baseline bottlenecks
+│   ├── KEY_FINDINGS_AND_FAQ.md          # Executive summary of findings & technical FAQ
+│   └── figures/                         # All 16 reproducible scientific figures
 ├── results/                             # 29 hardware-verified JSON/CSV benchmark & evaluation artifacts
 └── tests/                               # 66 automated pytest unit, kernel, accuracy, and claim tests
 ```
@@ -466,7 +479,7 @@ medtrt/
 ## 16. Reproducing the Verification Suite, Figures, and Benchmarks
 
 ### Offline Claim & Telemetry Verification (No GPU or Dataset Required)
-Verify that `README.md`, `docs/MEDTRT_TECHNICAL_PAPER.*`, and all `29` JSON/CSV files in `results/` are mathematically consistent and share code fingerprint `e9d4f060aaf1b130`:
+Verify that `README.md`, `docs/TECHNICAL_PAPER.*`, and all `29` JSON/CSV files in `results/` are mathematically consistent and share code fingerprint `e9d4f060aaf1b130`:
 
 ```bash
 python -m medtrt.verify_claims

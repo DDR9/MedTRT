@@ -282,11 +282,10 @@ def check_technical_paper() -> Result:
     """Verify that the technical paper (.md, .tex, .pdf) exists, has zero unresolved references,
     and reports the exact verified telemetry and secondary engineering problems.
     """
-    md_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.md"
-    tex_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.tex"
-    pdf_path = MEDTRT_ROOT / "docs" / "MEDTRT_TECHNICAL_PAPER.pdf"
-    rep_pdf = MEDTRT_ROOT / "reports" / "MEDTRT_TECHNICAL_PAPER.pdf"
-    for p in (md_path, tex_path, pdf_path, rep_pdf):
+    md_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.md"
+    tex_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.tex"
+    pdf_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.pdf"
+    for p in (md_path, tex_path, pdf_path):
         if not p.exists() or p.stat().st_size < 10_000:
             return False, f"missing or truncated technical paper artifact: {p.name}"
 
@@ -321,19 +320,19 @@ def check_technical_paper() -> Result:
     )
     for token in md_tokens:
         if token not in md_text:
-            return False, f"MEDTRT_TECHNICAL_PAPER.md missing required verified token '{token}'"
+            return False, f"TECHNICAL_PAPER.md missing required verified token '{token}'"
     for token in tex_tokens:
         if token not in tex_text:
-            return False, f"MEDTRT_TECHNICAL_PAPER.tex missing required verified token '{token}'"
+            return False, f"TECHNICAL_PAPER.tex missing required verified token '{token}'"
 
     low = md_text.lower()
     hit = [phrase for phrase in UNSUPPORTED_PHRASES if phrase in low]
     if hit:
-        return False, f"unsupported phrase(s) in MEDTRT_TECHNICAL_PAPER.md: {hit}"
+        return False, f"unsupported phrase(s) in TECHNICAL_PAPER.md: {hit}"
 
     return (
         True,
-        f"MEDTRT_TECHNICAL_PAPER (.md={md_path.stat().st_size // 1024} KB, .tex={tex_path.stat().st_size // 1024} KB, "
+        f"TECHNICAL_PAPER (.md={md_path.stat().st_size // 1024} KB, .tex={tex_path.stat().st_size // 1024} KB, "
         f".pdf={pdf_path.stat().st_size // 1024} KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data",
     )
 

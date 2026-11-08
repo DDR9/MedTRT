@@ -1,4 +1,4 @@
-# Phase 7 — Anatomical & Geometric Failure Mode Analysis
+# Anatomical & Geometric Boundary Error Analysis (`docs/ANATOMICAL_FAILURE_ANALYSIS.md`)
 
 > **Methodology:** Evaluates per-case error distributions across the 9 held-out CT scans (`results/failure_analysis.json`, `results/eval_trt_fp16_cuda.csv`), decomposing errors into False Positives (over-segmentation), False Negatives (under-segmentation), polar slice error concentration (superior/inferior organ domes), and physical surface distances (`HD95`, `ASSD`). Distinguishes measured statistical properties from anatomical boundary interpretations.
 
@@ -18,7 +18,7 @@
 
 ## 2. Detailed Case Study 1: `spleen_56` (Rank 1 Lowest Dice = `0.9361`, Highest HD95 = `4.25 mm`)
 
-![Failure Case 1: spleen_56](../docs/figures/failure_case_1.png)
+![Failure Case 1: spleen_56](figures/failure_case_1.png)
 
 - **Scan Geometry:** `[0.699, 0.699, 7.0]` mm spacing (`512 × 512 × 33`), z-anisotropy ratio **`10.01:1`**, smallest ground-truth spleen volume in the cohort (**`78.07 cm³`** vs. `286.73 cm³` cohort mean).
 - **Voxel Error Decomposition:**
@@ -36,7 +36,7 @@
 
 ## 3. Detailed Case Study 2: `spleen_62` (Rank 2 Lowest Dice = `0.9611`, Hilar Boundary Disagreement)
 
-![Failure Case 2: spleen_62](../docs/figures/failure_case_2.png)
+![Failure Case 2: spleen_62](figures/failure_case_2.png)
 
 - **Scan Geometry:** `[0.676, 0.676, 5.0]` mm spacing (`512 × 512 × 80`), z-anisotropy ratio **`7.4:1`**, ground-truth volume **`275.93 cm³`**.
 - **Voxel Error Decomposition:**

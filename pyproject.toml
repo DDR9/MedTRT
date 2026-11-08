@@ -7,6 +7,7 @@ name = "medtrt"
 version = "0.2.0"
 description = "MedTRT: GPU-Accelerated 3D CT Segmentation, Profiled and Validated on NVIDIA Blackwell"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.6.0",

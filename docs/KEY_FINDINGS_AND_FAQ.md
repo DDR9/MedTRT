@@ -1,10 +1,10 @@
-# Phase 14 — Quantified Engineering Evidence & Interview Defense Guide (`docs/RESUME_ENGINEERING_EVIDENCE.md`)
+# Key Engineering Findings, Architecture Summary & Technical FAQ (`docs/KEY_FINDINGS_AND_FAQ.md`)
 
 > Every metric below is backed by reproducible benchmark artifacts (`results/bench_*.json`, `results/cohort_41_volumes.json`, `results/benchmark_*.json`, `results/eval_*.csv`, `results/bland_altman.json`) measured on an **NVIDIA GeForce RTX 5080 Laptop GPU** (`sm_120`, 16 GB GDDR7, CUDA 12.8, TensorRT 10.16.1.11) and audited by our 65-test verification suite (`pytest tests/` & `python -m medtrt.verify_claims`).
 
 ---
 
-## 0. Canonical Verified Resume Bullets (Exact Match to Hardware Telemetry)
+## 1. Executive Summary of Verified Engineering Highlights
 
 - **Accelerated end-to-end 3D CT spleen segmentation by `42.9×` (`2,952 ms` to `68.9 ms`) across 41 patient volumes** by migrating spatial transformations to the GPU and implementing page-cached memory mapping with TensorRT 10.16 FP16 execution (`results/bench_pytorch_fp32.json`, `results/bench_trt_fp16_optimized.json`, `results/cohort_41_volumes.json`).
 - **Authored 9 custom CUDA C++17 kernels that compute $3\times 4$ affine resampling coordinates directly in registers, reducing peak pipeline VRAM from `2,301 MB` to `455 MB` (`5.1×` reduction) and accelerating 3D preprocessing `33.8×` (`1.3 ms`)** (`cuda/medical_kernels.cu`, `results/bench_trt_fp16_gpu.json`, `results/bench_trt_fp16_cuda.json`).
@@ -13,7 +13,7 @@
 
 ---
 
-## 1. Detailed Breakdown — NVIDIA (GPU Computing, CUDA C++, TensorRT, Performance Engineering)
+## 2. Systems & GPU Performance Engineering Breakdown
 
 1. **End-to-End 3D Medical Imaging Pipeline Acceleration (`42.9×` / `44.3×` Speedup):**
    Architected a zero-copy GPU 3D CT segmentation pipeline in PyTorch, TensorRT 10.16, and CUDA C++17 on an RTX 5080 (`sm_120`), reducing full-volume median end-to-end latency from **`3050 ms`** (strict FP32) / **`2952 ms`** (default TF32) to **`96.3 ms`** at identical sliding-window geometry (**`30.7×` speedup**) and **`68.9 ms`** (`14.5 volumes/s`, **`42.9×` speedup**) at Pareto-optimal window settings, with all 41 patient CT scans in `Task09_Spleen` verified on the GPU (`results/cohort_41_volumes.json`).
@@ -26,7 +26,7 @@
 
 ---
 
-## 2. Detailed Breakdown — Medtronic (Biomedical Imaging, Quantitative Validation, Verification)
+## 3. Biomedical Imaging & Quantitative Validation Breakdown
 
 1. **Multi-Metric 3D CT Organ Segmentation & Physical Volumetry Validation ($n = 9$ Held-Out Scans):**
    Validated 3D Residual UNet spleen segmentation across 13 execution profiles using 10 quantitative metrics (Dice, IoU, Sensitivity, Specificity, Precision, Volumetric Similarity, Absolute/Relative Volume Error, `HD95`, and `ASSD` in physical `mm` via $|\det(A_{3\times 3})|$), achieving **`Mean Dice = 0.9652 ± 0.0117` (`Median = 0.9708`)**, **`Mean HD95 = 2.18 ± 0.99 mm`**, and **`Mean ASSD = 0.39 ± 0.12 mm`**.
@@ -39,7 +39,7 @@
 
 ---
 
-## 3. Technical Interview Defense Q&A
+## 4. Frequently Asked Technical Questions (FAQ)
 
 ### Q1: Why did your pure network speedup (`17.0×` vs. Strict FP32 / `6.4×` vs. TF32 on `B=4` patches) initially translate to only `1.07×` end-to-end on the host pipeline?
 - **Answer:** By Amdahl's Law ($S \le 1/s$), `sw_network` (`285 ms`) was only `7.3%` of the `3,925 ms` host pipeline, whereas CPU trilinear `Invertd` (`3,025 ms`), CPU `Spacingd` (`438 ms`), and `.nii.gz` gzip decompression (`360 ms`) accounted for `92.7%` ($1/s = 1.08\times$). Even after moving transforms to MONAI's GPU `grid_sample` (`trt_fp16_gpu`, `176 ms` E2E), MONAI allocated `1.03–2.13 GB` 3D coordinate meshgrids in FP64/FP32 global memory. Writing custom CUDA C++ kernels that compute $3\times 4$ affine coordinates in registers reduced preprocessing and postprocessing to `~1.0–1.4 ms` each, unlocking the full **`53.5×`** (`trt_fp16_cuda`, `73.4 ms`) and **`105.7×`** (`trt_fp16_optimized`, `37.1 ms`) end-to-end speedup.

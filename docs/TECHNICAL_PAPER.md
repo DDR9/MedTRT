@@ -137,4 +137,4 @@ collapses the `-81.79` shift in `model.2.0` into `+0.599613`, reducing FP16 mean
 
 ## 7. Discussion, Limitations, and Future Work
 
-See Sections 8–10 of the compiled PDF manuscript (`docs/MEDTRT_TECHNICAL_PAPER.pdf`) for the full 5-part discussion (Accelerated Medical Imaging, Future Potential for Image-Guided Procedures, Numerical Reliability in Quantitative Volumetry, Resource-Constrained Computing, and General HPC Principles), the 9-point Limitations analysis, and 8 Future Research Directions.
+See Sections 8–10 of the compiled PDF manuscript (`docs/TECHNICAL_PAPER.pdf`) for the full 5-part discussion (Accelerated Medical Imaging, Future Potential for Image-Guided Procedures, Numerical Reliability in Quantitative Volumetry, Resource-Constrained Computing, and General HPC Principles), the 9-point Limitations analysis, and 8 Future Research Directions.

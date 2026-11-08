@@ -1,4 +1,4 @@
-# Phase 3 — GPU Profiling, NVTX Timeline Analysis & Bottleneck Decomposition
+# GPU Profiling, NVTX Timeline Analysis & Amdahl Bottleneck Decomposition (`docs/GPU_PROFILING_STUDY.md`)
 
 > **Scope & Hardware:** All measurements were recorded on an **NVIDIA GeForce RTX 5080 Laptop GPU** (`12.0 (sm_120)`, `15.92 GB` GDDR7, Driver `591.44`, CUDA `12.8`, TensorRT `10.16.1.11`). Stage boundaries are bracketed by synchronized `torch.cuda.Event(enable_timing=True)` pairs inside `torch.cuda.nvtx.range_push/pop` markers (`src/medtrt/timing.py`) and cross-checked against wall-clock `time.perf_counter()`.
 
@@ -15,7 +15,7 @@ Every full-volume pass is decomposed into 6 mutually exclusive, hardware-timed N
 5. **`sw_aggregate`**: 3D Gaussian importance-map weighting and overlapping patch accumulation (`_sw_total - sw_network`).
 6. **`postprocess`**: Softmax activation, inverse spatial resampling from `(1.5, 1.5, 2.0) mm` back to native patient CT geometry, argmax discretization (`uint8`), and D2H mask completion.
 
-![Stage Latency Breakdown](../docs/figures/stage_breakdown.png)
+![Stage Latency Breakdown](figures/stage_breakdown.png)
 
 ---
 
@@ -62,7 +62,7 @@ $$S_{\text{max}} = \frac{1}{s + \frac{p}{S_{\text{net}}}} \le \frac{1}{s}$$
 
 ## 4. Before vs. After Optimization Timeline (`spleen_6`, `512 × 512 × 135`)
 
-![Stage Timeline Comparison](../docs/figures/nsys_trace.png)
+![Stage Timeline Comparison](figures/nsys_trace.png)
 
 | Stage | Before: `trt_fp16` Host Path (ms) | After: `trt_fp16_optimized` Custom CUDA (ms) | Stage Speedup (×) |
 | :--- | :---: | :---: | :---: |

@@ -24,3 +24,6 @@ dist/
 
 # Cross-agent GPU lock
 results/.gpu_busy
+AGENTS.md
+CLAUDE.md
+.claude/
