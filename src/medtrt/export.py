@@ -23,10 +23,19 @@ from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
-import onnx
-import onnxruntime as ort
-import tensorrt as trt
 import torch
+
+try:
+    import onnx
+    import onnxruntime as ort
+except ImportError:  # pragma: no cover - optional on CPU-only verification clones
+    onnx = None  # type: ignore[assignment]
+    ort = None  # type: ignore[assignment]
+
+try:
+    import tensorrt as trt
+except ImportError:  # pragma: no cover - optional on CPU-only verification clones
+    trt = None  # type: ignore[assignment]
 
 from medtrt.config import ENGINES_DIR, MEDTRT_ROOT, RESULTS_DIR
 from medtrt.model import load_spleen_unet
@@ -58,6 +67,8 @@ def export_dynamic_onnx(
     Export 3D UNet to ONNX with dynamic batch axis B and verify `max_abs_diff < 1e-4`
     against PyTorch strict IEEE FP32.
     """
+    if onnx is None or ort is None:
+        raise RuntimeError("Dynamic ONNX export requires `onnx` and `onnxruntime` to be installed.")
     ENGINES_DIR.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda:0")
 
@@ -147,6 +158,8 @@ def build_trt_engine(
     Compile a TensorRT 10.x engine (`fp16` or `fp32`) with dynamic batch profile:
         min=(1, 1, 96, 96, 96), opt=(2, 1, 96, 96, 96), max=(8, 1, 96, 96, 96)
     """
+    if trt is None:
+        raise RuntimeError("TensorRT engine compilation requires `tensorrt` to be installed.")
     onnx_info = export_dynamic_onnx(onnx_path, fold_bn=fold_bn)
 
     print("=" * 84)
