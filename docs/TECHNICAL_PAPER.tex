@@ -1,25 +1,57 @@
 \documentclass[10pt,twocolumn]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[margin=0.60in]{geometry}
+\usepackage{lmodern}
+\usepackage[activate={true,nocompatibility},final,tracking=true,kerning=true,spacing=true]{microtype}
+\usepackage[letterpaper,top=0.68in,bottom=0.68in,left=0.60in,right=0.60in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{graphicx}
-\usepackage{hyperref}
+\usepackage{xcolor}
 \usepackage{array}
 \usepackage{caption}
 \usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+
+\definecolor{navyaccent}{RGB}{18,54,99}
+\definecolor{slateborder}{RGB}{195,205,218}
+\definecolor{abstractbg}{RGB}{247,249,252}
 
 \hypersetup{
     colorlinks=true,
-    linkcolor=blue,
-    citecolor=blue,
-    urlcolor=blue
+    linkcolor=navyaccent,
+    citecolor=navyaccent,
+    urlcolor=navyaccent,
+    pdftitle={MedTRT: Eliminating End-to-End I/O, 3D Affine Resampling, and FP16 Quantization Bottlenecks in Volumetric CT Organ Segmentation},
+    pdfauthor={Diego Diaz Rivera},
+    pdfsubject={Biomedical AI Systems, Custom CUDA C++17 Kernels, and TensorRT FP16 Numerical Validation},
+    pdfkeywords={3D CT Segmentation, 3D Residual U-Net, MONAI, CUDA C++17, TensorRT, FP16 Quantization, BatchNorm Folding, Amdahl's Law, TOST Equivalence}
 }
 
 \setlength{\columnsep}{0.22in}
-\captionsetup{font=footnotesize,labelfont=bf,skip=4pt}
+\setlength{\emergencystretch}{1.6em}
+\captionsetup{font=footnotesize,labelfont={bf,color=navyaccent},skip=4pt}
 \setlist{nosep,leftmargin=1.35em}
+
+\titleformat{\section}{\large\bfseries\color{navyaccent}}{\thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{8pt plus 2pt minus 2pt}{4pt}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{6pt plus 2pt minus 1pt}{2.5pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\textit{MedTRT: End-to-End GPU Systems \& FP16 Numerical Equivalence in Volumetric 3D CT Segmentation}}
+\fancyhead[R]{\footnotesize\textit{D.\ D\'iaz Rivera (2026)}}
+\fancyfoot[C]{\footnotesize\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{
+    \fancyhf{}
+    \fancyfoot[C]{\footnotesize\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+}
+
 \renewcommand{\topfraction}{0.95}
 \renewcommand{\bottomfraction}{0.95}
 \renewcommand{\dbltopfraction}{0.95}
@@ -33,131 +65,147 @@
 \setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
 \setlength{\dbltextfloatsep}{6pt plus 2pt minus 2pt}
 
-\title{\textbf{MedTRT: Eliminating End-to-End I/O, 3D Affine Resampling, and FP16 Quantization Bottlenecks in Volumetric CT Organ Segmentation}}
-\author{\textbf{Diego D\'iaz Rivera}\\
-Biomedical AI Systems \& GPU Performance Engineering\\
-\texttt{NVIDIA GeForce RTX 5080 Blackwell sm\_120} --- \url{https://github.com/DDR9/MedTRT}}
-\date{November 6, 2026}
-
 \begin{document}
-\maketitle
 
-\begin{abstract}
-\noindent\textbf{Background:} Three-dimensional convolutional neural networks such as the 3D Residual U-Net are foundational for automated organ segmentation in volumetric computed tomography (CT). However, processing high-resolution 3D medical volumes ($512 \times 512 \times 31\text{--}168$ slices, $8.1 \times 10^6$ to $4.4 \times 10^7$ voxels) with anisotropic voxel spacing ($1.5\text{--}8.0\text{ mm}$) requires an end-to-end computational workflow encompassing file decompression, canonical coordinate reorientation, trilinear spatial resampling, overlapping sliding-window patch inference, and inverse spatial transformation back to native patient geometry.
-
-\smallskip
-\noindent\textbf{Problem:} Optimizing neural network forward-pass execution alone fails to yield real-time end-to-end volumetric segmentation. Profiling the public MONAI \texttt{spleen\_\allowbreak ct\_\allowbreak segmentation} v0.6.1 bundle across $\mathbf{53}$ \textbf{abdominal CT volumes} ($41$ Medical Segmentation Decathlon \texttt{Task09\_\allowbreak Spleen} scans plus $12$ external unseen multi-center MICCAI \texttt{FLARE22} scans) on an NVIDIA GeForce RTX 5080 Laptop GPU (Blackwell \texttt{sm\_120}) reveals three fundamental systems and numerical bottlenecks: (1) in the baseline host pipeline (\texttt{pytorch\_\allowbreak fp32}, $2,952.0\text{ ms}$ median end-to-end latency in the 18-pass committed benchmark set; $3,341.1\text{ ms}$ in our 90-pass host reference run), neural network execution (\texttt{sw\_\allowbreak network} $= 254.6\text{ ms}$, or $260.8\text{ ms}$ in the 90-pass run) accounts for only $8.62\%$ ($7.81\%$) of total runtime, while $91.38\%$ ($92.19\%$) is consumed by CPU inverse resampling ($1,990.4\text{ ms}$), \texttt{.nii.gz} gzip decompression ($424.7\text{ ms}$), and CPU preprocessing ($286.4\text{ ms}$), bounding theoretical maximum network-only speedup via Amdahl's Law to $S_{\max} = 1.094\times$ ($1.085\times$); (2) migrating spatial resampling onto the GPU via MONAI's \texttt{Spatial\allowbreak Resample} backend (\texttt{trt\_\allowbreak fp16\_\allowbreak gpu}, $215.5\text{ ms}$) promotes 3D homogeneous coordinates to \texttt{torch.\allowbreak float64} on \texttt{cuda:0} and materializes dense $(1, D, H, W, 3)$ coordinate meshgrids, inflating peak allocated VRAM to $\mathbf{2,301\textbf{ MB}}$ ($\mathbf{5.06\times}$ higher than our register-affine pipeline); and (3) compiling the unmodified ONNX graph into TensorRT 10.16 FP16 (\texttt{trt\_\allowbreak fp16\_\allowbreak unfolded}) introduces a systematic volumetric dilation of $\mathbf{+1.6754 \pm 0.5531\textbf{ cm}^3}$ across $\mathbf{9/9}$ internal MSD scans ($p < 0.0001$) and $\mathbf{+1.5366 \pm 0.7680\textbf{ cm}^3}$ across $\mathbf{12/12}$ external \texttt{FLARE22} scans ($+1.5961 \pm 0.6721\text{ cm}^3$ across all $21/21$ patients) because PyTorch's ONNX exporter leaves decoder \texttt{Conv\allowbreak Transpose3d+\allowbreak BatchNorm3d} layers unfused, exposing a $-81.79$ shift in \texttt{model.2.0.\allowbreak adn.N} where IEEE-754 binary16 $\text{ULP}_{[64, 128)} = 0.0625$.
-
-\smallskip
-\noindent\textbf{Methods:} Without retraining or altering the mathematical function of the pretrained model, we developed: (i) an analytical \texttt{float64} weight transformation (\texttt{fold\_\allowbreak conv\_\allowbreak transpose\_\allowbreak batchnorm}) that folds \texttt{BatchNorm3d} scale and shift parameters into preceding \texttt{ConvTranspose3d} kernels prior to ONNX export; (ii) \textbf{nine custom CUDA C++17 kernels} (\texttt{cuda/medical\_kernels.cu}) that compute $3 \times 4$ voxel-to-voxel affine transformations directly in scalar registers, fusing Hounsfield Unit (HU) windowing with trilinear preprocessing and exploiting binary Softmax convexity ($p_0 + p_1 = 1$) to perform single-channel inverse trilinear resampling, thresholding, and warp-ballot (\texttt{\_\_ballot\_sync}) voxel counting in a single pass; and (iii) zero-copy TensorRT 10.16 execution paired with OS page-cached \texttt{.nii} memory mapping (\texttt{mmap}).
-
-\smallskip
-\noindent\textbf{Results:} Under identical sliding-window settings ($\text{overlap}=0.5, B=4$), our controlled like-for-like pipeline (\texttt{trt\_fp16\_cuda}) reduces median end-to-end latency from $2,952.0\text{ ms}$ to $\mathbf{96.3\textbf{ ms}}$ ($\mathbf{30.67\times}$ cohort median speedup; paired patient-level mean speedup $\mathbf{33.14\times}$, $95\%$ CI $[27.61\times, 38.67\times]$; and $35.13\times$ vs.\ the $3,341.1\text{ ms}$ 90-pass host run) while cutting peak VRAM from $2,301\text{ MB}$ to $\mathbf{455\textbf{ MB}}$ ($\mathbf{5.06\times}$ reduction). Our fast sliding-window operating point (\texttt{trt\_fp16\_optimized}, $\text{overlap}=0.25, B=8$) reaches $\mathbf{68.9\textbf{ ms}}$ median latency ($\mathbf{42.86\times}$ cohort speedup; paired patient-level median $\mathbf{46.64\times}$; $87.44\text{ ms}$ median across all 41 MSD scans; and $54.92\times$ at $60.8\text{ ms}$ in the earlier 90-pass host comparison). Analytical weight folding reduces mean absolute logit drift by $\mathbf{35.6\times}$ ($0.1377 \to 0.00387$) and satisfies formal paired Two One-Sided Tests (TOST) equivalence against strict IEEE FP32 within $\Delta_V = \pm 0.10\text{ cm}^3$ across internal MSD ($+0.0010 \pm 0.0194\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), external \texttt{FLARE22} ($-0.0110 \pm 0.0315\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), and pooled $N = 21$ cohorts ($-0.0059 \pm 0.0271\text{ cm}^3$, $90\%$ CI $[-0.0161, +0.0043]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$) as well as $\Delta_{\text{Dice}} = \pm 0.001$ ($\max |\Delta\text{Dice}| = 0.000029$ on MSD, Mean Dice $0.9652$, Mean HD95 $2.18\text{ mm}$, Mean ASSD $0.39\text{ mm}$).
-
-\smallskip
-\noindent\textbf{Conclusion:} Achieving real-time, numerically faithful 3D medical segmentation requires co-designing I/O ingestion, register-level GPU spatial kernels, and pre-export numerical conditioning alongside neural network compilation.
-\end{abstract}
+\twocolumn[{%
+\begin{@twocolumnfalse}
+\begin{center}
+    {\LARGE\bfseries\color{navyaccent} MedTRT: Eliminating End-to-End I/O, 3D Affine Resampling, and FP16 Quantization Bottlenecks in Volumetric CT Organ Segmentation\par}
+    \vspace{6pt}
+    {\normalsize\bfseries Diego D\'iaz Rivera\par}
+    \vspace{2pt}
+    {\small Department of Bioengineering, Rice University, Houston, TX, USA\\
+    Biomedical AI Systems \& GPU Performance Engineering $\cdot$ \url{https://github.com/DDR9/MedTRT}\par}
+    \vspace{2pt}
+    {\footnotesize Technical Manuscript $\cdot$ November 2026 $\cdot$ Reproducible Artifact Fingerprint: \texttt{e9d4f060aaf1b130}\par}
+\end{center}
+\vspace{4pt}
+\noindent\fcolorbox{slateborder}{abstractbg}{%
+\begin{minipage}{\dimexpr\textwidth-2\fboxsep-2\fboxrule\relax}
+\vspace{3pt}
+\footnotesize
+\noindent\textbf{\color{navyaccent}Abstract.}
+\textbf{Background:} Three-dimensional convolutional neural networks such as the 3D Residual U-Net enable automated volumetric organ segmentation in abdominal computed tomography (CT). Processing full diagnostic volumes ($512 \times 512 \times 31\text{--}168$ voxels, $8.13 \times 10^6$ to $4.40 \times 10^7$ voxels per scan) with anisotropic physical spacing ($1.5\text{--}8.0\text{ mm}$ axial slice thickness) requires a sequential pipeline spanning file decompression, canonical coordinate reorientation, trilinear spatial resampling, overlapping sliding-window patch inference, and inverse spatial resampling to native patient geometry.
+\textbf{Problem:} Profiling the pretrained MONAI \texttt{spleen\_ct\_segmentation} v0.6.1 bundle across \textbf{53 abdominal 3D CT volumes} ($41$ Medical Segmentation Decathlon \texttt{Task09\_Spleen} scans plus $12$ unseen external multi-center MICCAI \texttt{FLARE22} scans) on an NVIDIA GeForce RTX 5080 Laptop GPU (Blackwell \texttt{sm\_120}, $16\text{ GB}$ GDDR7) exposes three bottlenecks that defeat standalone network compilation: (1) in the baseline host pipeline (\texttt{pytorch\_fp32}, $2,952.0\text{ ms}$ median end-to-end latency), the 3D U-Net forward pass (\texttt{sw\_network} $= 254.6\text{ ms}$) consumes only $8.62\%$ of total runtime, while $91.38\%$ is spent in CPU inverse resampling ($1,990.4\text{ ms}$), \texttt{.nii.gz} decompression ($424.7\text{ ms}$), and CPU preprocessing ($286.4\text{ ms}$), bounding theoretical network-only speedup via Amdahl's Law to $S_{\max} = 1.094\times$; (2) moving spatial transforms onto the GPU via MONAI's \texttt{SpatialResample} backend (\texttt{trt\_fp16\_gpu}, $215.5\text{ ms}$) promotes 3D homogeneous coordinates to \texttt{torch.float64} and materializes dense $(1, D, H, W, 3)$ coordinate meshgrids, inflating peak allocated VRAM to \textbf{2,301 MB}; and (3) compiling the standard ONNX graph into TensorRT 10.16 FP16 (\texttt{trt\_fp16\_unfolded}) induces a systematic volumetric dilation of $+1.6754 \pm 0.5531\text{ cm}^3$ across $9/9$ internal MSD scans ($p < 0.0001$) and $+1.5366 \pm 0.7680\text{ cm}^3$ across $12/12$ external \texttt{FLARE22} scans ($+1.5961 \pm 0.6721\text{ cm}^3$ across all $21/21$ pooled patients) because PyTorch's ONNX exporter leaves decoder \texttt{ConvTranspose3d+BatchNorm3d} blocks unfused, exposing a $-81.79$ shift in \texttt{model.2.0.adn.N} where binary16 $\text{ULP}_{[64, 128)} = 0.0625$.
+\textbf{Methods:} Without retraining or altering model weights semantically, we introduce: (i) analytical IEEE-754 \texttt{float64} weight folding (\texttt{fold\_conv\_transpose\_batchnorm}) prior to ONNX export; (ii) \textbf{nine custom CUDA C++17 kernels} (\texttt{cuda/medical\_kernels.cu}) that compute $3 \times 4$ voxel-to-voxel affine coordinates in scalar registers, fuse Hounsfield Unit (HU) windowing with trilinear preprocessing, and exploit binary Softmax convexity ($p_0 + p_1 = 1$) for single-channel inverse trilinear resampling, thresholding, and warp-ballot (\texttt{\_\_ballot\_sync}) foreground counting; and (iii) zero-copy TensorRT 10.16 execution paired with OS page-cached \texttt{.nii} memory mapping (\texttt{mmap}), an interactive 3D tri-planar verification workstation, 66 automated \texttt{pytest} tests, and 14 deterministic offline claim checks.
+\textbf{Results:} At matched sliding windows ($\text{overlap}=0.5, B=4$), our controlled pipeline (\texttt{trt\_fp16\_cuda}) lowers median latency from $2,952.0\text{ ms}$ to \textbf{96.3 ms} (\textbf{30.67$\times$} cohort median speedup; \textbf{33.14$\times$} paired patient-level mean speedup, $95\%$ CI $[27.61\times, 38.67\times]$) and cuts peak VRAM from $2,301\text{ MB}$ to \textbf{455 MB} (\textbf{5.06$\times$} reduction). Our fast-window operating point (\texttt{trt\_fp16\_optimized}, $\text{overlap}=0.25, B=8$) reaches \textbf{68.9 ms} median latency (\textbf{42.86$\times$} cohort speedup; \textbf{46.64$\times$} paired median speedup; $87.44\text{ ms}$ median across all 41 MSD volumes). Analytical FP64 folding reduces mean absolute logit drift by \textbf{35.6$\times$} ($0.1377 \to 0.00387$) and satisfies paired Two One-Sided Tests (TOST) equivalence against strict IEEE FP32 within $\Delta_V = \pm 0.10\text{ cm}^3$ across internal MSD ($+0.0010 \pm 0.0194\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), external \texttt{FLARE22} ($-0.0110 \pm 0.0315\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), and pooled $N = 21$ patients ($-0.0059 \pm 0.0271\text{ cm}^3$, $90\%$ CI $[-0.0161, +0.0043]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), maintaining Mean Dice $0.9652$, $\max |\Delta\text{Dice}| = 0.000029$, Mean $\text{HD}_{95} = 2.18\text{ mm}$, and Mean $\text{ASSD} = 0.39\text{ mm}$.
+\textbf{Conclusion:} Real-time, numerically faithful 3D medical segmentation requires co-designing storage ingestion, register-level GPU spatial kernels, and pre-export algebraic conditioning alongside neural network compilation.\\[3pt]
+\noindent\textbf{\color{navyaccent}Index Terms:} 3D Computed Tomography, Volumetric Organ Segmentation, CUDA C++17, NVIDIA TensorRT, FP16 Quantization, Transposed Convolution BatchNorm Folding, Amdahl's Law, Quantitative Volumetry, TOST Equivalence.\\[2pt]
+\noindent\textit{Research Disclosure: MedTRT is an educational and scientific GPU systems benchmark on public retrospective datasets and is not a cleared clinical medical device.}
+\vspace{2pt}
+\end{minipage}%
+}
+\vspace{10pt}
+\end{@twocolumnfalse}%
+}]
 
 \section{Introduction}
 \label{sec:intro}
 
-Three-dimensional convolutional neural networks (3D CNNs), particularly the 3D U-Net \cite{cicek2016} and 3D Residual U-Net \cite{kerfoot2019}, are foundational tools in computational medicine for volumetric organ segmentation in abdominal computed tomography (CT). Quantitative volumetric measurements derived from 3D CT segmentation support splenomegaly monitoring in portal hypertension and hematologic malignancies, organ-at-risk contouring in radiation oncology, trauma assessment, and computer-assisted surgical planning. However, deploying 3D volumetric segmentation models in time-sensitive research and clinical computing environments presents systems and numerical challenges that differ fundamentally from 2D natural image inference.
+Three-dimensional convolutional neural networks (3D CNNs), led by the 3D U-Net \cite{cicek2016} and 3D Residual U-Net \cite{kerfoot2019}, serve as standard architectures in computational biomedical imaging for automated organ segmentation in abdominal computed tomography (CT). Quantitative volumetric measurements derived from 3D CT segmentation support research workflows in splenomegaly tracking for portal hypertension and hematologic disorders, organ-at-risk delineation in radiation oncology, trauma volumetry, and computer-assisted surgical modeling. Deploying 3D volumetric segmentation pipelines at interactive latencies nevertheless poses computational and numerical challenges that differ fundamentally from two-dimensional natural image inference.
 
-Whereas a standard 2D RGB image ($224 \times 224 \times 3$) contains $1.5 \times 10^5$ scalar values on a uniform pixel grid, an abdominal 3D CT study comprises $512 \times 512 \times Z$ voxels ($Z \in [31, 168]$, spanning $8.13 \times 10^6$ to $4.40 \times 10^7$ voxels in our 53-volume study). Each CT volume is embedded in physical patient space via a $4 \times 4$ homogeneous affine matrix $A \in \mathbb{R}^{4 \times 4}$ with highly anisotropic slice spacing ($0.59\text{--}0.98\text{ mm}$ in-plane vs.\ $1.5\text{--}8.0\text{ mm}$ axial thickness). Because evaluating a 3D CNN monolithically across $4.4 \times 10^7$ voxels exceeds standard GPU activation memory, medical imaging frameworks such as MONAI \cite{cardoso2022,monaibundle2024} execute a multi-stage volumetric pipeline: decompressing NIfTI storage, reorienting axes to canonical Right-Anterior-Superior (\texttt{RAS}) coordinates, resampling voxel spacing to a canonical lattice ($1.5 \times 1.5 \times 2.0\text{ mm}$), evaluating overlapping $96 \times 96 \times 96$ patches via Gaussian-weighted sliding-window inference, and inverting the predicted probability field back to the native scanner grid.
+Whereas a standard 2D RGB image ($224 \times 224 \times 3$) contains $1.5 \times 10^5$ scalar values on an isotropic pixel lattice, a diagnostic abdominal 3D CT scan contains $512 \times 512 \times Z$ voxels, where $Z$ (axial slice count, dimensionless integer in $[31, 168]$) yields $8.13 \times 10^6$ to $4.40 \times 10^7$ voxels per volume in our 53-scan evaluation. Each CT volume is embedded in physical patient coordinates (millimeters) via a homogeneous affine matrix $A \in \mathbb{R}^{4 \times 4}$ with pronounced axial anisotropy ($0.59\text{--}0.98\text{ mm}$ in-plane pixel spacing vs.\ $1.5\text{--}8.0\text{ mm}$ slice thickness). Because evaluating a 3D CNN monolithically across $4.4 \times 10^7$ voxels exceeds standard GPU activation memory, medical imaging frameworks such as MONAI \cite{cardoso2022,monaibundle2024} execute a multi-stage volumetric pipeline: decompressing NIfTI files, reorienting scanner axes to canonical Right-Anterior-Superior (\texttt{RAS}) orientation, resampling voxel spacing to a canonical lattice ($1.5 \times 1.5 \times 2.0\text{ mm}$), running Gaussian-weighted sliding-window inference over $96 \times 96 \times 96$ patches, and inverting the predicted probability field back to native patient geometry.
 
-Standard deep learning deployment workflows focus almost exclusively on accelerating the neural network forward pass via reduced-precision compilers such as NVIDIA TensorRT \cite{tensorrt2025}. In this paper, we demonstrate that applying neural network acceleration in isolation fails both computationally and numerically on 3D volumetric medical segmentation. Specifically, when non-network stages consume over $91\%$ of end-to-end runtime, Amdahl's Law \cite{amdahl1967} caps total pipeline speedup near $1.09\times$ regardless of network speed. Furthermore, naively moving spatial resampling onto the GPU using framework primitives triggers a $2.30\text{ GB}$ VRAM explosion due to double-precision (\texttt{float64}) coordinate meshgrids, while compiling standard ONNX graphs into IEEE-754 half precision (\texttt{FP16}) introduces a systematic $+1.60\text{ cm}^3$ volumetric organ dilation across $21/21$ internal and external CT scans due to unfused decoder transposed-convolution batch normalization.
+Conventional deep learning deployment studies focus primarily on accelerating neural network layers using reduced-precision graph compilers such as NVIDIA TensorRT \cite{tensorrt2025}. In this paper, we demonstrate that accelerating the neural network in isolation fails both computationally and numerically on volumetric 3D CT segmentation. First, when non-network stages consume $91.38\%$ of end-to-end execution time, Amdahl's Law \cite{amdahl1967} restricts total pipeline speedup below $1.095\times$ even for an infinitely fast neural network. Second, migrating spatial transforms onto the GPU via standard framework primitives triggers a $2,301\text{ MB}$ VRAM spike caused by silent \texttt{torch.float64} promotion and dense 3D coordinate meshgrid materialization. Third, compiling unmodified ONNX exports into IEEE-754 half precision (\texttt{FP16}) introduces a systematic $+1.60\text{ cm}^3$ volumetric organ dilation across $21/21$ internal and external CT scans due to unfused decoder transposed-convolution batch normalization.
 
-This study presents \textbf{MedTRT}, an end-to-end GPU systems and numerical-fidelity overhaul of a pretrained MONAI 3D Residual U-Net (\texttt{spleen\_ct\_segmentation} v0.6.1 \cite{monaibundle2024,xia2018}), evaluated across 53 abdominal CT scans from the Medical Segmentation Decathlon (\texttt{Task09\_Spleen}) \cite{antonelli2022,simpson2019} and the external multi-center MICCAI \texttt{FLARE22} benchmark \cite{ma2023flare}.
+This report presents the complete architecture, mathematical derivations, kernel implementations, software verification infrastructure, and multi-cohort experimental validation of \textbf{MedTRT}, an end-to-end GPU systems and numerical-fidelity platform built around a pretrained MONAI 3D Residual U-Net (\texttt{spleen\_ct\_segmentation} v0.6.1 \cite{monaibundle2024,xia2018}) and evaluated across 53 abdominal CT volumes from the Medical Segmentation Decathlon (\texttt{Task09\_Spleen}) \cite{antonelli2022,simpson2019} and the unseen external multi-center MICCAI \texttt{FLARE22} benchmark \cite{ma2023flare}.
 
-\section{Background and Related Work: The 3D Volumetric Segmentation Pipeline}
+\section{Background: The Five Stages of Volumetric 3D CT Segmentation}
 \label{sec:background}
 
-To make this study accessible across high-performance computing, numerical analysis, and biomedical engineering, we formalize the five computational stages of 3D CT segmentation:
+To establish exact mathematical notation across high-performance GPU computing, numerical analysis, and biomedical image analysis, we formalize the five sequential stages of volumetric CT organ segmentation.
 
-\subsection{Stage 1: Volumetric CT Representation, Hounsfield Units, and NIfTI Ingestion}
-A 3D CT scan measures linear X-ray attenuation coefficients $\mu(x,y,z)$ calibrated to the Hounsfield Unit (HU) scale relative to water ($\mu_{\text{water}}$) and air ($\mu_{\text{air}} \approx 0$):
+\subsection{Stage 1: CT Attenuation Physics and NIfTI Ingestion}
+Computed tomography reconstructs spatial maps of linear X-ray attenuation coefficients $\mu(x,y,z)$ (attenuation per unit path length, $\text{cm}^{-1}$), calibrated to the standardized Hounsfield Unit ($\text{HU}$, dimensionless radiodensity scale) relative to distilled water ($\mu_{\text{water}}$) and air ($\mu_{\text{air}} \approx 0$):
 \begin{equation}
     \text{HU}(x, y, z) = 1000 \times \frac{\mu(x, y, z) - \mu_{\text{water}}}{\mu_{\text{water}} - \mu_{\text{air}}}
+    \label{eq:hu}
 \end{equation}
-where air is $-1000\text{ HU}$, water is $0\text{ HU}$, splenic parenchyma spans $+35\text{ to }+65\text{ HU}$ (windowed to $[-57, +164]\text{ HU}$), and cortical bone exceeds $+400\text{ HU}$. Volumes are stored in NIfTI-1 format (\texttt{.nii} or gzip-compressed \texttt{.nii.gz}) containing a $352$-byte binary header (encoding dimensions $(D_x, D_y, D_z)$, datatype, and the $4 \times 4$ voxel-to-world affine matrix $A_{\text{orig}}$) followed by contiguous voxel payloads ($31\text{--}142\text{ MB}$ in \texttt{float32}). Reading \texttt{.nii.gz} requires single-threaded CPU DEFLATE decompression before any bytes reach PCIe, whereas pre-decompressed \texttt{.nii} files can be mapped directly into virtual memory via OS page-cached \texttt{mmap} \cite{brett2024}.
+Under Eq.~\eqref{eq:hu}, air equals $-1000\text{ HU}$, water equals $0\text{ HU}$, splenic parenchyma spans $+35\text{ to }+65\text{ HU}$ (clamped to the abdominal soft-tissue window $[a_{\min}, a_{\max}] = [-57, +164]\text{ HU}$), and cortical bone exceeds $+400\text{ HU}$. Research volumes are stored in NIfTI-1 format (\texttt{.nii} or gzip-compressed \texttt{.nii.gz}), comprising a $352$-byte header encoding lattice dimensions $(D_x, D_y, D_z)$, scalar datatype, and the native voxel-to-world affine matrix $A_{\text{orig}} \in \mathbb{R}^{4 \times 4}$, followed by contiguous voxel payloads ($31\text{--}168\text{ MB}$ in \texttt{float32}). Ingesting \texttt{.nii.gz} requires single-threaded CPU DEFLATE decompression prior to host-to-device (\texttt{h2d}) PCIe transfer, whereas uncompressed \texttt{.nii} payloads can be mapped directly into virtual address space via operating-system page-cached \texttt{mmap} \cite{brett2024}.
 
-\subsection{Stage 2: Affine Coordinate Geometry, Canonical RAS Orientation, and Trilinear Resampling}
-Because clinical CT scanners acquire slices under diverse patient orientations (e.g., Left-Posterior-Superior \texttt{LPS} vs.\ Right-Anterior-Superior \texttt{RAS}) and slice thicknesses ($1.5\text{--}8.0\text{ mm}$), a 3D CNN requires a standardized coordinate frame. Given native voxel coordinates $\mathbf{i} = [i, j, k, 1]^T$, physical world coordinates (in millimeters) are given by $\mathbf{p}_{\text{world}} = A_{\text{orig}} \mathbf{i}$. Reorienting to \texttt{RAS} and resampling to target spacing $\mathbf{s}_{\text{target}} = (1.5, 1.5, 2.0)\text{ mm}$ defines a target affine matrix $A_{\text{res}}$ and target grid shape $(D'_x, D'_y, D'_z)$. Each output voxel $\mathbf{x}_o = [x_o, y_o, z_o, 1]^T$ maps to continuous source voxel coordinates $\mathbf{x}_s = [f_x, f_y, f_z, 1]^T$ via the composite voxel-to-voxel transformation:
+\subsection{Stage 2: Affine Coordinate Geometry, RAS Orientation, and Trilinear Resampling}
+Clinical CT scanners acquire axial stacks under varying anatomical axis conventions (such as Left-Posterior-Superior \texttt{LPS} vs.\ Right-Anterior-Superior \texttt{RAS}) and heterogeneous voxel spacings $\mathbf{s}_{\text{orig}} = (s_x, s_y, s_z)$ (voxel dimensions, $\text{mm}$). Given discrete native voxel indices $\mathbf{i} = [i, j, k, 1]^T$, physical coordinates $\mathbf{p}_{\text{world}}$ (spatial position, $\text{mm}$) satisfy $\mathbf{p}_{\text{world}} = A_{\text{orig}} \mathbf{i}$. Reorienting axes to canonical \texttt{RAS} and resampling spacing to $\mathbf{s}_{\text{target}} = (1.5, 1.5, 2.0)\text{ mm}$ defines a canonical affine matrix $A_{\text{res}} \in \mathbb{R}^{4 \times 4}$ and canonical grid dimensions $(D'_x, D'_y, D'_z)$. Every canonical output voxel $\mathbf{x}_o = [x_o, y_o, z_o, 1]^T$ maps to continuous source voxel coordinates $\mathbf{x}_s = [f_x, f_y, f_z, 1]^T$ through the composite voxel-to-voxel matrix $M_{\text{pre}} \in \mathbb{R}^{4 \times 4}$:
 \begin{equation}
     \mathbf{x}_s = A_{\text{orig}}^{-1} A_{\text{res}} \mathbf{x}_o = M_{\text{pre}} \mathbf{x}_o
     \label{eq:affine_composition}
 \end{equation}
-Intensity at $\mathbf{x}_s$ is interpolated from the 8 surrounding lattice corners $(x_a, y_b, z_c) \in \{\lfloor f_x \rfloor, \lfloor f_x \rfloor + 1\} \times \{\lfloor f_y \rfloor, \lfloor f_y \rfloor + 1\} \times \{\lfloor f_z \rfloor, \lfloor f_z \rfloor + 1\}$ with fractional weights $w_x = f_x - \lfloor f_x \rfloor, w_y = f_y - \lfloor f_y \rfloor, w_z = f_z - \lfloor f_z \rfloor$, followed by clamping to $[a_{\min}, a_{\max}] = [-57, 164]\text{ HU}$ and linear normalization to $[0, 1]$.
+Scalar intensity at $\mathbf{x}_s$ is interpolated from the 8 surrounding lattice corners $(x_a, y_b, z_c) \in \{\lfloor f_x \rfloor, \lfloor f_x \rfloor + 1\} \times \{\lfloor f_y \rfloor, \lfloor f_y \rfloor + 1\} \times \{\lfloor f_z \rfloor, \lfloor f_z \rfloor + 1\}$ with fractional weights $w_x = f_x - \lfloor f_x \rfloor$, $w_y = f_y - \lfloor f_y \rfloor$, and $w_z = f_z - \lfloor f_z \rfloor$, clamped to $[-57, 164]\text{ HU}$, and linearly scaled to $[0, 1]$.
 
-\subsection{Stage 3: 3D Residual U-Net and Gaussian-Weighted Sliding-Window Inference}
-The MONAI \texttt{spleen\_ct\_segmentation} v0.6.1 model \cite{kerfoot2019,monaibundle2024} is an encoder-decoder 3D Residual U-Net with feature channels $(16, 32, 64, 128, 256)$, instance/batch normalization, PReLU activations, and transposed-convolution upsampling pathways producing 2-channel logits $(L_0, L_1)$. Because resampled volumes ($e.g., 315 \times 315 \times 338$) exceed the $96 \times 96 \times 96$ receptive field, sliding-window inference extracts $N_{\text{win}}$ overlapping patches with stride $s_d = \lfloor 96(1 - \text{overlap}) \rfloor$, evaluates batches of size $B$, and blends patch logits $L^{(p)}$ using a 3D separable Gaussian importance window $G(\mathbf{r}) = \exp(-\frac{1}{2}\sum_{d=1}^3 (r_d / \sigma_d)^2)$ with $\sigma = 0.125$:
+\subsection{Stage 3: 3D Residual U-Net and Gaussian Sliding-Window Inference}
+The MONAI \texttt{spleen\_ct\_segmentation} v0.6.1 architecture \cite{kerfoot2019,monaibundle2024} is a 5-level encoder-decoder 3D Residual U-Net with channel widths $(16, 32, 64, 128, 256)$, BatchNorm3d normalization, PReLU activations, and 3D transposed-convolution upsampling pathways outputting 2-channel logits $(L_0, L_1)$ (unnormalized log-probabilities for background and spleen). Because resampled volumes exceed the $96 \times 96 \times 96$ network patch size, sliding-window inference partitions the grid into $N_{\text{win}}$ overlapping patches with stride $s_d = \lfloor 96(1 - \omega) \rfloor$, where $\omega \in [0, 1)$ (fractional patch overlap, dimensionless), evaluates mini-batches of size $B$ (patches per forward call), and blends patch logits $L^{(p)}$ using a separable 3D Gaussian importance kernel $G(\mathbf{r}) = \exp\big(-\frac{1}{2}\sum_{d=1}^3 (r_d / \sigma_d)^2\big)$ with relative standard deviation $\sigma = 0.125$:
 \begin{equation}
     L_{\text{agg}}(\mathbf{v}) = \frac{\sum_{p \in \mathcal{P}(\mathbf{v})} G(\mathbf{v} - \mathbf{o}_p) \, L^{(p)}(\mathbf{v} - \mathbf{o}_p)}{\sum_{p \in \mathcal{P}(\mathbf{v})} G(\mathbf{v} - \mathbf{o}_p)}
+    \label{eq:sw_agg}
 \end{equation}
+where $\mathcal{P}(\mathbf{v})$ denotes the set of patches covering canonical voxel $\mathbf{v}$ and $\mathbf{o}_p$ denotes the origin of patch $p$.
 
-\subsection{Stage 4: Inverse Spatial Transformation and Discretization}
-To evaluate segmentation masks against clinical ground truth in native scanner space, the aggregated logits $L_{\text{agg}} \in \mathbb{R}^{2 \times D'_x \times D'_y \times D'_z}$ are converted to probabilities via Softmax, resampled back to native dimensions $(D_x, D_y, D_z)$ via the inverse affine mapping $M_{\text{inv}} = A_{\text{res}}^{-1} A_{\text{orig}} = M_{\text{pre}}^{-1}$, and discretized via $\arg\max_{c \in \{0,1\}}$. Critically, trilinear interpolation of continuous probabilities prior to thresholding preserves smooth sub-voxel organ boundaries across thick axial slices, whereas discretizing before nearest-neighbor inversion introduces severe staircase aliasing.
+\subsection{Stage 4: Inverse Spatial Resampling and Mask Discretization}
+To evaluate anatomical contours in the patient's native scanner frame, aggregated logits $L_{\text{agg}} \in \mathbb{R}^{2 \times D'_x \times D'_y \times D'_z}$ are mapped to class probabilities via Softmax, resampled back to native dimensions $(D_x, D_y, D_z)$ via $M_{\text{inv}} = A_{\text{res}}^{-1} A_{\text{orig}} = M_{\text{pre}}^{-1}$, and discretized via $\arg\max_{c \in \{0,1\}}$. Trilinearly interpolating continuous probabilities prior to thresholding preserves smooth sub-voxel organ surfaces across thick CT slices ($5.0\text{--}8.0\text{ mm}$), whereas discretizing prior to nearest-neighbor inversion introduces severe axial staircase aliasing.
+
+\subsection{Stage 5: Physical Volumetry and Surface Distance Evaluation}
+Given binary predicted mask $\hat{Y} \in \{0, 1\}^{D_x \times D_y \times D_z}$ with foreground voxel count $N_{\text{fg}} = \sum_{\mathbf{i}} \hat{Y}(\mathbf{i})$, physical organ volume $V$ (organ volume, $\text{cm}^3$) is determined by the Jacobian determinant of the $3 \times 3$ linear spatial submatrix $A_{3\times 3}$ of $A_{\text{orig}}$:
+\begin{equation}
+    V = \frac{N_{\text{fg}} \cdot \lvert \det(A_{3\times 3}) \rvert}{1000}\;\text{cm}^3
+    \label{eq:volume}
+\end{equation}
+Accounting for full off-diagonal affine shear and rotation terms via $\lvert\det(A_{3\times 3})\rvert$ rather than naive header zoom products prevents geometric bias on tilted gantry acquisitions.
 
 \section{Research Questions and Contributions}
 \label{sec:questions}
 
-This manuscript investigates the central research question:
+This study addresses one central research question:
 \begin{quote}
-\textit{Can 3D volumetric medical image segmentation achieve order-of-magnitude end-to-end acceleration through systems-level GPU optimization while maintaining statistical numerical agreement with a strict IEEE-754 FP32 reference implementation?}
+\textit{Can 3D volumetric medical image segmentation achieve order-of-magnitude end-to-end GPU acceleration while preserving formal statistical numerical equivalence with a strict IEEE-754 FP32 reference implementation?}
 \end{quote}
-We decompose this inquiry into two coupled research problems:
+We decompose this question into two coupled investigations:
 \begin{itemize}
-    \item \textbf{Research Problem A (Systems-Level Performance \& Amdahl's Law):} Why does accelerating neural network inference alone fail to deliver large end-to-end speedups in volumetric medical imaging, and how can I/O ingestion, 3D affine preprocessing, and inverse resampling be co-designed in custom CUDA C++17 to eliminate both host CPU bottlenecks and framework GPU memory bloat?
-    \item \textbf{Research Problem B (Numerical Fidelity in Reduced-Precision Deployment):} Why does standard ONNX-to-TensorRT FP16 compilation introduce a systematic $+1.60\text{ cm}^3$ volumetric bias across $21/21$ abdominal CT scans, and can an exact pre-export mathematical transformation restore strict FP32 volumetric equivalence without sacrificing FP16 Tensor Core throughput?
+    \item \textbf{Research Problem A (Systems Performance \& Amdahl's Law):} Why does standalone neural network compilation fail to accelerate end-to-end 3D CT segmentation, and how can storage ingestion, 3D affine preprocessing, and inverse probability resampling be co-designed in custom CUDA C++17 to eliminate both CPU bottlenecks and framework GPU memory bloat?
+    \item \textbf{Research Problem B (FP16 Numerical Stability):} Why does standard ONNX-to-TensorRT FP16 compilation induce a systematic $+1.60\text{ cm}^3$ volumetric organ dilation across $21/21$ CT scans, and can an exact pre-export algebraic transformation restore strict IEEE-754 FP32 equivalence without sacrificing Tensor Core throughput?
 \end{itemize}
 
-\noindent\textbf{Primary Contributions:}
+\noindent\textbf{Primary Project Contributions:}
 \begin{enumerate}
-    \item \textbf{End-to-End Bottleneck Characterization \& Amdahl's Law Proof:} We instrument all six stages of 3D CT segmentation across 13 execution profiles, proving that non-network stages account for $91.38\%$ ($92.19\%$ in 90-pass host runs) of baseline runtime ($S_{\max} = 1.094\times$ / $1.085\times$) and exposing MONAI's silent promotion of 3D resampling grids to \texttt{torch.float64} on GPU ($2,301\text{ MB}$ peak VRAM).
-    \item \textbf{Nine Register-Affine Custom CUDA C++17 Kernels:} We design and validate 9 custom CUDA kernels (\texttt{cuda/medical\_kernels.cu}) targeting Blackwell \texttt{sm\_120} that compute $3 \times 4$ affine coordinates in scalar registers, exploit binary Softmax convexity to halve postprocessing memory traffic, and reduce GPU preprocessing time by $\mathbf{33.8\times}$ ($43.9\text{ ms} \to 1.27\text{ ms}$), postprocessing time by $\mathbf{27.1\times}$ vs.\ MONAI GPU ($71.1\text{ ms} \to 2.62\text{ ms}$) and $\mathbf{760\times}$ vs.\ CPU ($1,990.4\text{ ms} \to 2.62\text{ ms}$), and peak VRAM by $\mathbf{5.06\times}$ ($2,301\text{ MB} \to 455\text{ MB}$).
-    \item \textbf{Discovery \& Analytical FP64 Resolution of Unfused ONNX \texttt{ConvTranspose3d+BatchNorm3d} FP16 Cancellation:} We trace the $+1.68\text{ cm}^3$ (MSD) and $+1.54\text{ cm}^3$ (\texttt{FLARE22}) FP16 volume dilation to asymmetric ONNX constant folding in \texttt{model.2.0.adn.N} (shift $-81.79$ at $\text{ULP}_{[64,128)} = 0.0625$) and prove that analytical FP64 weight folding reduces logit drift by $\mathbf{35.6\times}$ and achieves paired TOST equivalence ($p_{\text{TOST}} < 10^{-6}$) within $\pm 0.10\text{ cm}^3$.
-    \item \textbf{Multi-Cohort 53-Volume Evaluation \& Automated Verification Suite:} We validate performance and numerical equivalence across 41 internal MSD scans and 12 unseen external multi-center MICCAI \texttt{FLARE22} scans, backed by 66 automated tests and 14 offline verification checks (\texttt{python -m medtrt.verify\_claims}).
+    \item \textbf{Six-Stage Bottleneck Telemetry \& Amdahl's Law Proof:} We instrument all six execution stages across 13 execution profiles, demonstrating that non-network overhead accounts for $91.38\%$ of host runtime ($S_{\max} = 1.094\times$) and uncovering MONAI's promotion of 3D GPU resampling coordinates to \texttt{torch.float64} ($2,301\text{ MB}$ peak VRAM).
+    \item \textbf{Nine Register-Affine Custom CUDA C++17 Kernels:} We implement and profile 9 custom CUDA kernels (\texttt{cuda/medical\_kernels.cu}) compiled via NVRTC 12.8 for Blackwell \texttt{sm\_120} that compute $3 \times 4$ affine coordinates in scalar registers and exploit binary Softmax convexity to halve postprocessing memory traffic, accelerating GPU preprocessing by $\mathbf{33.8\times}$ ($43.9\text{ ms} \to 1.27\text{ ms}$), GPU postprocessing by $\mathbf{27.1\times}$ ($71.1\text{ ms} \to 2.62\text{ ms}$, or $\mathbf{760\times}$ vs.\ CPU), and reducing peak VRAM by $\mathbf{5.06\times}$ ($2,301\text{ MB} \to 455\text{ MB}$).
+    \item \textbf{Root-Cause Diagnosis \& Analytical FP64 Resolution of Decoder FP16 Cancellation:} We trace the $+1.68\text{ cm}^3$ (MSD) and $+1.54\text{ cm}^3$ (\texttt{FLARE22}) unfolded FP16 dilation to asymmetric ONNX constant folding in \texttt{model.2.0.adn.N} (unfused shift $-81.79$ at $\text{ULP}_{[64,128)} = 0.0625$) and prove that analytical \texttt{float64} weight folding cuts logit drift by $\mathbf{35.6\times}$ and achieves paired TOST equivalence ($p_{\text{TOST}} < 10^{-6}$) within $\pm 0.10\text{ cm}^3$.
+    \item \textbf{Multi-Cohort 53-Volume Validation, Interactive Tri-Planar Workstation, and Automated Claim Verifier:} We validate MedTRT across 41 internal MSD scans and 12 external multi-center MICCAI \texttt{FLARE22} scans, accompanied by a Streamlit 3D radiological verification workstation (\texttt{app/workstation.py}), 66 \texttt{pytest} tests, and a 14-check offline claim audit suite (\texttt{src/medtrt/verify\_claims.py}).
 \end{enumerate}
 
-\section{Baseline Architecture and Bottleneck Identification}
+\section{Baseline Bottleneck Characterization}
 \label{sec:bottlenecks}
 
-\subsection{Amdahl's Law Formulation at Three Levels}
-\begin{enumerate}
-    \item \textbf{Intuitive Level:} When a computation spends over $91\%$ of its time reading compressed files and interpolating 3D voxel grids on the CPU before and after the neural network, making the neural network infinitely fast cannot reduce total latency by more than $\sim 9\%$.
-    \item \textbf{Computational Level:} In the baseline host pipeline (\texttt{pytorch\_fp32}, $\text{overlap}=0.5, B=4$), total median latency across the 9 MSD validation scans is $2,951.96\text{ ms}$ (and $3,341.1\text{ ms}$ in the 90-pass host reference run). The 3D U-Net forward pass (\texttt{sw\_network}) consumes only $254.60\text{ ms}$ ($260.8\text{ ms}$), whereas CPU \texttt{Invertd} postprocessing consumes $1,990.42\text{ ms}$ ($2,195.3\text{ ms}$), \texttt{.nii.gz} ingestion consumes $424.68\text{ ms}$, and CPU preprocessing consumes $286.42\text{ ms}$ ($284.4\text{ ms}$). Substituting TensorRT FP16 on the host path (\texttt{trt\_fp16}) reduces \texttt{sw\_network} to $167.11\text{ ms}$, but total E2E latency remains $2,880.32\text{ ms}$---a negligible $1.025\times$ speedup.
-    \item \textbf{Mathematical Level:} Let $T_{\text{E2E}} = T_{\text{non-net}} + T_{\text{net}}$, and let $p = T_{\text{net}} / T_{\text{E2E}}$ denote the parallelizable/acceleratable network fraction. By Amdahl's Law \cite{amdahl1967}, accelerating the network by a factor $S_{\text{net}}$ yields overall speedup:
-    \begin{equation}
-    \begin{aligned}
-        S(S_{\text{net}}) &= \frac{1}{(1 - p) + \frac{p}{S_{\text{net}}}}, \\
-        S_{\max} &= \lim_{S_{\text{net}} \to \infty} S(S_{\text{net}}) = \frac{1}{1 - p}
-    \end{aligned}
-    \label{eq:amdahl}
-    \end{equation}
-    In the committed host baseline ($p = 254.60 / 2951.96 = 0.0862$), $S_{\max} = (1 - 0.0862)^{-1} = 1.0944\times$. In the 90-pass host reference run ($p = 260.8 / 3341.1 = 0.0781$), $S_{\max} = (1 - 0.0781)^{-1} = 1.0847\times$. Thus, order-of-magnitude end-to-end speedup is mathematically impossible without eliminating the $91.4\text{--}92.2\%$ non-network bottleneck.
-\end{enumerate}
+\subsection{Amdahl's Law Across Host and GPU Execution Paths}
+Let $T_{\text{E2E}} = T_{\text{non-net}} + T_{\text{net}}$ (end-to-end volume latency, $\text{ms}$) and let $p = T_{\text{net}} / T_{\text{E2E}}$ (network runtime fraction, dimensionless). By Amdahl's Law \cite{amdahl1967}, accelerating the network stage by factor $S_{\text{net}}$ yields total pipeline speedup $S(S_{\text{net}})$:
+\begin{equation}
+\begin{aligned}
+    S(S_{\text{net}}) &= \frac{1}{(1 - p) + \frac{p}{S_{\text{net}}}}, \\
+    S_{\max} &= \lim_{S_{\text{net}} \to \infty} S(S_{\text{net}}) = \frac{1}{1 - p}
+\end{aligned}
+\label{eq:amdahl}
+\end{equation}
+In the baseline host pipeline (\texttt{pytorch\_fp32}, $\omega=0.5, B=4$), cohort median latency across the 9 held-out MSD scans is $2,952.0\text{ ms}$, whereas \texttt{sw\_network} requires only $254.6\text{ ms}$ ($p = 0.0862$). Non-network stages consume $2,697.4\text{ ms}$ ($91.38\%$): CPU trilinear \texttt{Invertd} ($1,990.4\text{ ms}$, $67.4\%$), \texttt{.nii.gz} decompression ($424.7\text{ ms}$, $14.4\%$), CPU preprocessing ($286.4\text{ ms}$, $9.7\%$), and window aggregation ($8.0\text{ ms}$). Substituting TensorRT FP16 on the host path (\texttt{trt\_fp16}) accelerates \texttt{sw\_network} to $167.1\text{ ms}$, yet end-to-end latency drops only to $2,880.3\text{ ms}$ ($1.02\times$ speedup), empirically confirming the Amdahl ceiling $S_{\max} = (1 - 0.0862)^{-1} = 1.094\times$ (and $S_{\max} = 1.085\times$ in our 90-pass host reference run at $3,341.1\text{ ms}$ E2E / $260.8\text{ ms}$ network). Only after eliminating host I/O and CPU spatial resampling does the network share rise to $50.9\%$ in \texttt{trt\_fp16\_cuda}, unlocking TensorRT acceleration.
 
-\subsection{Why Framework GPU Transforms (\texttt{trt\_fp16\_gpu}) Spike VRAM to $2,301\text{ MB}$}
-Moving \texttt{Orientationd}, \texttt{Spacingd}, and \texttt{Invertd} onto the GPU via MONAI's \texttt{SpatialResample} backend (\texttt{trt\_fp16\_gpu}) reduces median E2E latency to $215.48\text{ ms}$. However, hardware dtype and memory instrumentation (\texttt{src/medtrt/probes.py}) uncovered two critical inefficiencies:
+\subsection{Why Framework GPU Resampling Spikes VRAM to 2,301 MB}
+Migrating \texttt{Orientationd}, \texttt{Spacingd}, and \texttt{Invertd} onto the GPU via MONAI's \texttt{SpatialResample} primitive (\texttt{trt\_fp16\_gpu}) lowers median E2E latency to $215.5\text{ ms}$, but hardware instrumentation (\texttt{src/medtrt/probes.py}) identified two severe bottlenecks:
 \begin{enumerate}
-    \item \textbf{Silent \texttt{torch.float64} Promotion on Consumer Blackwell Hardware:} MONAI constructs 3D homogeneous coordinate grids $(1, 4, D, H, W)$ in \texttt{torch.float64} on \texttt{cuda:0} prior to calling \texttt{grid\_sample}. On consumer GeForce Blackwell GPUs (\texttt{sm\_120}), FP64 instruction throughput is $1/64$ of FP32 throughput.
-    \item \textbf{Dense 3D Coordinate Meshgrid Materialization:} To interpolate an output volume of shape $(D, H, W)$, \texttt{grid\_sample} requires a materialized $(1, D, H, W, 3)$ coordinate tensor in global memory. On \texttt{spleen\_6} ($512 \times 512 \times 135 = 35,389,440$ voxels), this allocates $961.38\text{ MB}$ of incremental VRAM during preprocessing and $2,100.25\text{ MB}$ during 2-channel trilinear postprocessing, driving full-pipeline peak allocated VRAM to $\mathbf{2,301.29\textbf{ MB}}$ ($3,667.70\text{ MB}$ reserved) compared to $487\text{ MB}$ when transforms execute on the CPU (Figure~\ref{fig:arch_diagram}).
+    \item \textbf{Silent \texttt{torch.float64} Coordinate Promotion:} MONAI constructs 3D homogeneous voxel grids $(1, 4, D, H, W)$ in \texttt{torch.float64} on \texttt{cuda:0} prior to invoking \texttt{grid\_sample}. On consumer Blackwell GPUs (\texttt{sm\_120}), FP64 instruction throughput is $1/64$ of FP32 throughput.
+    \item \textbf{Dense 3D Coordinate Meshgrid Allocation:} PyTorch's \texttt{grid\_sample} requires a materialized $(1, D, H, W, 3)$ sampling tensor in global memory. On \texttt{spleen\_6} ($512 \times 512 \times 135 = 35,389,440$ voxels), this allocates $961.4\text{ MB}$ of incremental VRAM during preprocessing and $2,100.2\text{ MB}$ during 2-channel trilinear postprocessing, pushing full-pipeline peak allocated VRAM to $\mathbf{2,301.3\textbf{ MB}}$ ($3,667.7\text{ MB}$ reserved) compared to $487\text{ MB}$ on the CPU transform path (Figure~\ref{fig:arch_diagram}).
 \end{enumerate}
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.92\textwidth]{figures/pipeline_architecture.png}
-    \caption{Architectural comparison of (A) the Baseline Host Pipeline (\texttt{pytorch\_fp32}, $2,952.0\text{ ms}$ E2E, $91.4\%$ non-network overhead), (B) the Naive Framework GPU + Unfolded ONNX Pipeline (\texttt{trt\_fp16\_gpu} / \texttt{unfolded}, $215.5\text{ ms}$ E2E, $2,301\text{ MB}$ peak VRAM from \texttt{float64} coordinate meshgrids, and $+1.68\text{ cm}^3$ FP16 dilation), and (C) the MedTRT Custom CUDA C++17 + Analytical BN-Folded TensorRT 10.16 FP16 Pipeline ($96.3\text{ ms}$ matched / $68.9\text{ ms}$ fast, $455\text{ MB}$ VRAM, $+0.001\text{ cm}^3$ bias).}
+    \includegraphics[width=0.93\textwidth]{figures/pipeline_architecture.png}
+    \caption{End-to-end architectural comparison of (A) the Baseline Host Pipeline (\texttt{pytorch\_fp32}, $2,952.0\text{ ms}$ median E2E, $91.4\%$ non-network overhead, $S_{\max} = 1.094\times$), (B) the Framework GPU + Unfolded ONNX Pipeline (\texttt{trt\_fp16\_gpu} / \texttt{unfolded}, $215.5\text{ ms}$ E2E, $2,301\text{ MB}$ peak VRAM from \texttt{float64} coordinate meshgrids, and $+1.68\text{ cm}^3$ FP16 volume dilation), and (C) the MedTRT Custom CUDA C++17 + Analytical FP64-Folded TensorRT 10.16 Pipeline ($96.3\text{ ms}$ matched / $68.9\text{ ms}$ fast, $455\text{ MB}$ peak VRAM, $+0.001\text{ cm}^3$ internal volume bias).}
     \label{fig:arch_diagram}
 \end{figure*}
 
-\section{MedTRT System Architecture and Custom CUDA C++17 Implementation}
+\section{MedTRT System Architecture and Custom CUDA C++17 Kernels}
 \label{sec:cuda}
 
-To eliminate both host CPU bottlenecks and MONAI's $2,301\text{ MB}$ GPU coordinate meshgrids, we designed the MedTRT execution pipeline (Figure~\ref{fig:arch_diagram}C) around \textbf{nine custom CUDA C++17 \texttt{\_\_global\_\_} kernels} in \texttt{cuda/medical\_kernels.cu} (Table~\ref{tab:kernels}), compiled at runtime to native Blackwell \texttt{compute\_120} (\texttt{sm\_120}) SASS via NVRTC 12.8 (\texttt{nvrtc64\_120\_0.dll} with \texttt{--gpu-architecture=compute\_120 --use\_fast\_math -default-device}) and launched zero-copy on PyTorch tensor pointers (\texttt{tensor.data\_ptr()}) via the CUDA Driver API (\texttt{nvcuda.dll}).
+To eliminate host CPU bottlenecks and MONAI's $2,301\text{ MB}$ coordinate meshgrids simultaneously, MedTRT implements \textbf{nine custom CUDA C++17 \texttt{\_\_global\_\_} kernels} in \texttt{cuda/medical\_kernels.cu} (Table~\ref{tab:kernels}). All kernels are compiled at runtime to native Blackwell \texttt{compute\_120} (\texttt{sm\_120}) SASS via NVRTC 12.8 (\texttt{-{}-gpu-architecture=compute\_120 -{}-use\_fast\_math -default-device}) and launched zero-copy on PyTorch device pointers (\texttt{tensor.data\_ptr()}) through the CUDA Driver API (\texttt{nvcuda.dll}).
 
-\subsection{Register-Based $3 \times 4$ Affine Coordinate Transformation}
-Instead of materializing a $(1, D, H, W, 3)$ coordinate grid in global DRAM, we precompute the exact $3 \times 4$ voxel-to-voxel affine matrices $M_{\text{pre}} = (A_{\text{orig}}^{-1} A_{\text{res}})_{[0:3, 0:4]}$ and $M_{\text{inv}} = (A_{\text{res}}^{-1} A_{\text{orig}})_{[0:3, 0:4]}$ on the host in IEEE-754 \texttt{float64} (\texttt{compute\_ras\_resampled\_geometry} in \texttt{src/medtrt/cuda\_kernels.py}, matching MONAI's \texttt{Orientationd+Spacingd} target affine to $4.44 \times 10^{-16}$) and pass the 12 scalar \texttt{float32} coefficients $(m_{00}, \dots, m_{23})$ by value into kernel constant/register arguments. Each CUDA thread mapped to output voxel $(x_o, y_o, z_o)$ in an $(8 \times 8 \times 4) = 256$-thread 3D block computes its continuous source coordinates $(f_x, f_y, f_z)$ directly in scalar registers:
+\subsection{Register-Computed $3 \times 4$ Affine Coordinate Mapping}
+Rather than allocating $(1, D, H, W, 3)$ coordinate tensors in global GDDR7 memory, we precompute the exact $3 \times 4$ voxel-to-voxel matrices $M_{\text{pre}} = (A_{\text{orig}}^{-1} A_{\text{res}})_{[0:3, 0:4]}$ and $M_{\text{inv}} = (A_{\text{res}}^{-1} A_{\text{orig}})_{[0:3, 0:4]}$ on the host in IEEE-754 \texttt{float64} (\texttt{compute\_ras\_resampled\_geometry} in \texttt{src/medtrt/cuda\_kernels.py}, matching MONAI's target affine to $4.44 \times 10^{-16}$) and pass the 12 scalar \texttt{float32} entries $(m_{00}, \dots, m_{23})$ by value in constant kernel parameter registers. Each GPU thread assigned to output voxel $(x_o, y_o, z_o)$ within an $(8 \times 8 \times 4) = 256$-thread 3D block evaluates its source coordinates $(f_x, f_y, f_z)$ directly in scalar registers via hardware fused multiply-add (\texttt{FFMA}) instructions:
 \begin{equation}
 \begin{bmatrix} f_x \\ f_y \\ f_z \end{bmatrix} =
 \begin{bmatrix}
@@ -168,22 +216,22 @@ m_{20} & m_{21} & m_{22} & m_{23}
 \begin{bmatrix} x_o \\ y_o \\ z_o \\ 1 \end{bmatrix}
 \label{eq:reg_affine}
 \end{equation}
-Because $z$ is the contiguous innermost dimension in $(C, X, Y, Z)$ memory layout, assigning \texttt{threadIdx.x} to $z_o$ maximizes L1/L2 cache-line coalescing across the 8-corner trilinear neighborhood.
+Because $z$ is the contiguous innermost axis in $(C, X, Y, Z)$ tensor layout, mapping \texttt{threadIdx.x} to $z_o$ ensures coalesced L1/L2 cache-line transactions across the 8-corner trilinear stencil.
 
 \subsection{Fused Preprocessing Kernel (\texttt{fused\_\allowbreak preprocess\_\allowbreak affine\_\allowbreak trilinear\_\allowbreak hu\_f32})}
-Kernel \#4 fuses three separate MONAI transforms---\texttt{Orientationd(axcodes="RAS")}, \texttt{Spacingd(pixdim=(1.5, 1.5, 2.0), mode="bilinear")}, and \texttt{ScaleIntensityRanged(a\_min=-57, a\_max=164, b\_min=0, b\_max=1)}---into a single global-memory read/write pass. After computing $(f_x, f_y, f_z)$ via Eq.~\eqref{eq:reg_affine} and clamping to border bounds $[0, D_{\text{in}}-1]$, the kernel interpolates the 8 surrounding source voxels using \texttt{const float* \_\_restrict\_\_} pointer aliasing qualification and NVRTC \texttt{--use\_fast\_math} (which lowers multiply-add chains to hardware fused multiply-add SASS instructions \texttt{FFMA}), clamps the interpolated HU scalar to $[-57, 164]$, and writes the normalized intensity $(v - a_{\min})\cdot \text{scale} + b_{\min}$ directly to the resampled tensor. As shown in Table~\ref{tab:kernels} and Figure~\ref{fig:reg_affine}A, this kernel uses $37$ registers/thread with $0\text{ B}$ spill, achieves $100.0\%$ theoretical SM occupancy ($48/48$ warps/SM), reduces incremental preprocessing VRAM on \texttt{spleen\_6} by $\mathbf{56.7\times}$ ($961.4\text{ MB} \to 16.95\text{ MB}$), and executes in $\mathbf{1.27\textbf{ ms}}$ cohort median---a $\mathbf{33.8\times}$ \textbf{speedup} over MONAI GPU ($43.9\text{ ms}$) and $\mathbf{225\times}$ \textbf{speedup} over CPU ($286.4\text{ ms}$).
+Kernel \#4 fuses three distinct MONAI transforms (\texttt{Orientationd} to \texttt{RAS}, trilinear \texttt{Spacingd} to $1.5 \times 1.5 \times 2.0\text{ mm}$, and \texttt{ScaleIntensityRanged} over $[-57, 164]\text{ HU} \to [0, 1]$) into a single global-memory pass. Using \texttt{const float* \_\_restrict\_\_} pointer qualification, border clamping matching MONAI padding semantics, and register-only interpolation, Kernel \#4 compiles to $37$ registers/thread with $0\text{ B}$ stack spill and $100.0\%$ theoretical SM occupancy ($48/48$ active warps/SM on RTX 5080). On \texttt{spleen\_6}, incremental preprocessing VRAM drops by $\mathbf{56.7\times}$ ($961.4\text{ MB} \to 16.95\text{ MB}$, Figure~\ref{fig:reg_affine}A), while cohort median preprocessing latency drops to $\mathbf{1.27\textbf{ ms}}$, achieving a $\mathbf{33.8\times}$ speedup over MONAI GPU ($43.9\text{ ms}$) and a $\mathbf{225\times}$ speedup over CPU ($286.4\text{ ms}$).
 
-\subsection{Single-Channel Softmax Convexity Reduction and Fused Postprocessing}
-Standard MONAI postprocessing (\texttt{Activationsd(softmax=True)} $\to$ \texttt{Invertd} $\to$ \texttt{AsDiscreted(argmax=True)}) materializes a 2-channel resampled probability tensor on the native scanner grid ($2 \times 512 \times 512 \times 135 \times 4\text{ B} = 283.1\text{ MB}$ plus $2.10\text{ GB}$ of \texttt{float64} meshgrids on \texttt{spleen\_6}) and performs 16 global memory loads per output voxel (8 corners $\times 2$ channels). We prove that for binary segmentation, interpolating both channels is mathematically redundant:
+\subsection{Single-Channel Softmax Convexity Theorem and Fused Postprocessing}
+Standard postprocessing (\texttt{Activationsd(softmax)} $\to$ \texttt{Invertd} $\to$ \texttt{AsDiscreted(argmax)}) allocates a 2-channel native-resolution probability volume ($283.1\text{ MB}$ on \texttt{spleen\_6}) alongside $2.10\text{ GB}$ of \texttt{float64} meshgrids and executes 16 global loads per output voxel (8 corners $\times$ 2 channels). For binary segmentation, we prove that 2-channel interpolation is algebraically redundant:
 \begin{itemize}
-    \item \textbf{Theorem (Single-Channel Trilinear Convexity Equivalence):} Let $p_0(\mathbf{v}) + p_1(\mathbf{v}) = 1$ be the 2-class Softmax probabilities at every canonical grid node $\mathbf{v}$. Because 3D trilinear interpolation at native voxel $\mathbf{x}_o$ is a convex combination over the 8 lattice corners with weights $\sum_{k=0}^7 W_k(\mathbf{x}_o) = 1$ ($W_k \ge 0$), the interpolated native-grid probabilities $\tilde{p}_c(\mathbf{x}_o) = \sum_{k=0}^7 W_k(\mathbf{x}_o) p_c(\mathbf{v}_k)$ satisfy:
+    \item \textbf{Theorem (Single-Channel Trilinear Convexity Equivalence):} Let $p_0(\mathbf{v}) + p_1(\mathbf{v}) = 1$ denote the 2-class Softmax probabilities at every canonical lattice node $\mathbf{v}$. Because 3D trilinear interpolation at native voxel $\mathbf{x}_o$ forms a convex combination over the 8 surrounding corners $\mathbf{v}_k$ with non-negative weights $\sum_{k=0}^7 W_k(\mathbf{x}_o) = 1$, the interpolated native-space probabilities $\tilde{p}_c(\mathbf{x}_o) = \sum_{k=0}^7 W_k(\mathbf{x}_o) p_c(\mathbf{v}_k)$ satisfy:
     \begin{equation}
     \begin{aligned}
         \tilde{p}_0(\mathbf{x}_o) + \tilde{p}_1(\mathbf{x}_o) &= \sum_{k=0}^7 W_k(\mathbf{x}_o)\big(p_0(\mathbf{v}_k) + p_1(\mathbf{v}_k)\big) \\
         &= \sum_{k=0}^7 W_k(\mathbf{x}_o) = 1
     \end{aligned}
     \end{equation}
-    Consequently, the discretized label satisfies:
+    Consequently, discrete argmax classification reduces identically to single-channel thresholding:
     \begin{equation}
     \begin{aligned}
         \arg\max_{c \in \{0, 1\}} \tilde{p}_c(\mathbf{x}_o) = 1 &\iff \tilde{p}_1(\mathbf{x}_o) \ge \tilde{p}_0(\mathbf{x}_o) \\
@@ -192,33 +240,33 @@ Standard MONAI postprocessing (\texttt{Activationsd(softmax=True)} $\to$ \texttt
     \label{eq:convexity}
     \end{equation}
 \end{itemize}
-We implement Eq.~\eqref{eq:convexity} via two back-to-back kernels: Kernel \#6 (\texttt{fused\_\allowbreak softmax\_\allowbreak 2ch\_p1\_f32}) computes $p_1 = e^{L_1 - m}/(e^{L_0 - m} + e^{L_1 - m})$ ($m = \max(L_0, L_1)$ via hardware SFU \texttt{\_\_expf}) into a 1-channel buffer, and Kernel \#7 (\texttt{fused\_invert\_trilinear\_threshold\_u8}) performs 8-corner register-affine trilinear interpolation of $p_1$ alone, writes $\text{is\_fg} = (\tilde{p}_1 \ge 0.5\text{f})$ directly as a native \texttt{uint8} mask, and counts foreground voxels across each 32-thread warp using hardware warp-vote intrinsics:
+We realize Eq.~\eqref{eq:convexity} via two fused kernels: Kernel \#6 (\texttt{fused\_softmax\_2ch\_p1\_f32}) computes $p_1 = e^{L_1 - m}/(e^{L_0 - m} + e^{L_1 - m})$ with $m = \max(L_0, L_1)$ using special-function hardware \texttt{\_\_expf} into a 1-channel buffer, and Kernel \#7 (\texttt{fused\_invert\_trilinear\_threshold\_u8}) performs 8-corner register-affine trilinear interpolation of $p_1$ alone, writes $\text{is\_fg} = (\tilde{p}_1 \ge 0.5\text{f})$ directly as a native \texttt{uint8} tensor, and accumulates total foreground voxel count $N_{\text{fg}}$ in-register across each 32-thread warp via warp-ballot intrinsics:
 \begin{equation}
 \begin{aligned}
     \text{mask} &= \texttt{\_\_ballot\_sync}(\texttt{0xFFFFFFFFu}, \text{is\_fg} \neq 0\text{u}), \\
-    \text{if } &(\text{lane} == 0) \;\; \texttt{atomicAdd}(\text{counter}, \texttt{\_\_popc}(\text{mask}))
+    \text{if } &(\text{lane} == 0) \;\; \texttt{atomicAdd}(\text{fg\_counter}, \texttt{\_\_popc}(\text{mask}))
 \end{aligned}
 \end{equation}
-This cuts postprocessing memory reads in half, reduces incremental postprocessing VRAM on \texttt{spleen\_6} by $\mathbf{50.8\times}$ ($2,100.25\text{ MB} \to 41.32\text{ MB}$), executes in $\mathbf{2.62\textbf{ ms}}$ cohort median ($\mathbf{27.1\times}$ \textbf{faster} than MONAI GPU at $71.1\text{ ms}$ and $\mathbf{760\times}$ \textbf{faster} than CPU at $1,990.4\text{ ms}$; $0.951\text{ ms}$ or $124.9\times$ in isolated kernel benchmarks on \texttt{spleen\_6}), and achieves $\mathbf{100.00000\%}$ \textbf{exact voxel parity} across all $35,389,440$ voxels of \texttt{spleen\_6}.
+This halves memory read traffic, cuts incremental postprocessing VRAM on \texttt{spleen\_6} by $\mathbf{50.8\times}$ ($2,100.25\text{ MB} \to 41.32\text{ MB}$), executes in $\mathbf{2.62\textbf{ ms}}$ cohort median ($\mathbf{27.1\times}$ faster than MONAI GPU at $71.1\text{ ms}$ and $\mathbf{760\times}$ faster than CPU at $1,990.4\text{ ms}$), and achieves $\mathbf{100.00000\%}$ exact voxel parity across all $35,389,440$ voxels of \texttt{spleen\_6}.
 
-\begin{table*}[!htbp]
+\begin{table*}[!t]
 \centering
-\caption{Hardware compilation and SM occupancy profile of all 9 custom CUDA C++17 \texttt{\_\_global\_\_} kernels (\texttt{cuda/medical\_kernels.cu}) queried via \texttt{cuFuncGetAttribute} and \texttt{cuOccupancyMaxActiveBlocksPerMultiprocessor} on the NVIDIA GeForce RTX 5080 Laptop GPU (\texttt{sm\_120}, $60$ SMs). Note: pointer aliasing uses explicit \texttt{\_\_restrict\_\_}; FMA instructions (\texttt{FFMA}) are compiler-generated via NVRTC \texttt{--use\_fast\_math}; warp reductions use explicit \texttt{\_\_ballot\_sync}, \texttt{\_\_popc}, and \texttt{\_\_shfl\_down\_sync}.}
+\caption{Compilation attributes and hardware SM occupancy across all 9 custom CUDA C++17 \texttt{\_\_global\_\_} kernels (\texttt{cuda/medical\_kernels.cu}) queried via \texttt{cuFuncGetAttribute} and \texttt{cuOccupancyMaxActiveBlocksPerMultiprocessor} on the NVIDIA GeForce RTX 5080 Laptop GPU (\texttt{sm\_120}, $60$ SMs, $48$ max warps/SM).}
 \label{tab:kernels}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{clccccl}
 \toprule
-\textbf{\#} & \textbf{Custom CUDA C++17 Kernel (\texttt{cuda/medical\_kernels.cu})} & \textbf{SASS Target} & \textbf{Regs / Thread} & \textbf{Shared / Spill} & \textbf{Active Warps / SM ($256\text{t}$)} & \textbf{Primary Pipeline Role \& Measured Performance} \\
+\textbf{\#} & \textbf{Custom CUDA C++17 Kernel (\texttt{cuda/medical\_kernels.cu})} & \textbf{SASS Target} & \textbf{Regs / Thread} & \textbf{Shared / Spill} & \textbf{Active Warps / SM ($256\text{t}$)} & \textbf{Primary Pipeline Role \& Verified Hardware Performance} \\
 \midrule
 1 & \texttt{hu\_window\_normalize\_f32} & \texttt{sm\_120} & $23$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Scalar grid-stride HU clamp \& linear scaling ($0.611\text{ ms}$, $\mathbf{463.7\textbf{ GB/s}}$) \\
 2 & \texttt{hu\_window\_normalize\_vec4\_f32} & \texttt{sm\_120} & $48$ & $0\text{ B} / 0\text{ B}$ & $40 / 48$ ($\mathbf{83.3\%}$) & 128-bit vectorized \texttt{float4} coalesced HU scaling ($0.607\text{ ms}$, $\mathbf{466.7\textbf{ GB/s}}$) \\
-3 & \texttt{affine\_trilinear\_resample\_3d\_f32} & \texttt{sm\_120} & $72$ & $0\text{ B} / 0\text{ B}$ & $24 / 48$ ($\mathbf{50.0\%}$) & Standalone register-affine 3D trilinear resampling ($\mathbf{6.4\text{--}13.3\times}$ \textbf{faster} than PyTorch) \\
-4 & \textbf{\texttt{fused\_preprocess\_affine\_trilinear\_hu\_f32}} & \texttt{sm\_120} & $37$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Fused \texttt{RAS} $+ 1.5\times 1.5\times 2.0\text{ mm}$ trilinear $+$ HU windowing ($\mathbf{1.27\textbf{ ms}}$ \textbf{median, $\mathbf{33.8\times}$ faster}) \\
-5 & \texttt{affine\_nearest\_resample\_3d\_u8} & \texttt{sm\_120} & $16$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Register-affine 3D nearest-neighbor \texttt{uint8} resampling ($\mathbf{16.7\text{--}48.1\times}$ \textbf{faster} than PyTorch) \\
-6 & \textbf{\texttt{fused\_softmax\_2ch\_p1\_f32}} & \texttt{sm\_120} & $32$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Numerically stable 2-ch Softmax (\texttt{\_\_expf}) to 1-ch foreground probability $p_1$ \\
-7 & \textbf{\texttt{fused\_invert\_trilinear\_threshold\_u8}} & \texttt{sm\_120} & $38$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Fused 1-ch inverse trilinear $+ \ge 0.5$ \texttt{uint8} $+$ \texttt{\_\_ballot\_sync} count ($\mathbf{2.62\textbf{ ms}}$ \textbf{E2E / $50.8\times$ less VRAM}) \\
-8 & \texttt{count\_nonzero\_u8} & \texttt{sm\_120} & $36$ & $128\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Two-stage warp-shuffle (\texttt{\_\_shfl\_down\_sync}) $+$ shared-mem reduction ($\mathbf{8.4\times}$ \textbf{faster}) \\
-9 & \texttt{sliding\_window\_gaussian\_accumulate\_f32} & \texttt{sm\_120} & $56$ & $0\text{ B} / 0\text{ B}$ & $32 / 48$ ($\mathbf{66.7\%}$) & Fused 3D Gaussian importance weighting \& sliding-window accumulation \\
+3 & \texttt{affine\_trilinear\_resample\_3d\_f32} & \texttt{sm\_120} & $72$ & $0\text{ B} / 0\text{ B}$ & $24 / 48$ ($\mathbf{50.0\%}$) & Multi-channel register-affine 3D trilinear resampling ($\mathbf{6.4\text{--}13.3\times}$ faster than PyTorch) \\
+4 & \textbf{\texttt{fused\_preprocess\_affine\_trilinear\_hu\_f32}} & \texttt{sm\_120} & $37$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Fused \texttt{RAS} $+ 1.5\times 1.5\times 2.0\text{ mm}$ trilinear $+$ HU windowing ($\mathbf{1.27\textbf{ ms}}$ median, $\mathbf{33.8\times}$ faster) \\
+5 & \texttt{affine\_nearest\_resample\_3d\_u8} & \texttt{sm\_120} & $16$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Register-affine 3D nearest-neighbor \texttt{uint8} resampling ($\mathbf{16.7\text{--}48.1\times}$ faster than PyTorch) \\
+6 & \textbf{\texttt{fused\_softmax\_2ch\_p1\_f32}} & \texttt{sm\_120} & $32$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Numerically stable 2-channel Softmax (\texttt{\_\_expf}) to 1-channel foreground probability $p_1$ \\
+7 & \textbf{\texttt{fused\_invert\_trilinear\_threshold\_u8}} & \texttt{sm\_120} & $38$ & $0\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Fused 1-ch inverse trilinear $+ \ge 0.5$ \texttt{uint8} $+$ \texttt{\_\_ballot\_sync} count ($\mathbf{2.62\textbf{ ms}}$ E2E, $\mathbf{50.8\times}$ less VRAM) \\
+8 & \texttt{count\_nonzero\_u8} & \texttt{sm\_120} & $36$ & $128\text{ B} / 0\text{ B}$ & $48 / 48$ ($\mathbf{100.0\%}$) & Two-stage warp-shuffle (\texttt{\_\_shfl\_down\_sync}) $+$ shared-memory voxel reduction ($\mathbf{8.4\times}$ faster) \\
+9 & \texttt{sliding\_window\_gaussian\_accumulate\_f32} & \texttt{sm\_120} & $56$ & $0\text{ B} / 0\text{ B}$ & $32 / 48$ ($\mathbf{66.7\%}$) & Fused 3D Gaussian importance weighting \& sliding-window patch logit accumulation \\
 \bottomrule
 \end{tabular}%
 }
@@ -227,51 +275,47 @@ This cuts postprocessing memory reads in half, reduces incremental postprocessin
 \begin{figure*}[t]
     \centering
     \includegraphics[width=0.90\textwidth]{figures/register_affine_mechanism.png}
-    \caption{\textbf{Left (A):} Elimination of MONAI's \texttt{float64} 3D coordinate meshgrid VRAM via MedTRT register-affine CUDA C++17 kernels ($961.4 \to 16.9\text{ MB}$ in preprocessing; $2,100.2 \to 41.3\text{ MB}$ in postprocessing; $2,301.3 \to 455.0\text{ MB}$ full pipeline). \textbf{Right (B):} Comparison of unfused ONNX \texttt{BatchNorm3d} shift magnitudes vs.\ analytical FP64-folded \texttt{ConvTranspose3d} biases across all four decoder blocks.}
+    \caption{\textbf{Left (A):} Elimination of MONAI's \texttt{float64} 3D coordinate meshgrid VRAM via MedTRT register-affine CUDA C++17 kernels ($961.4 \to 16.9\text{ MB}$ in preprocessing; $2,100.2 \to 41.3\text{ MB}$ in postprocessing; $2,301.3 \to 455.0\text{ MB}$ peak E2E pipeline). \textbf{Right (B):} Magnitude comparison of unfused ONNX \texttt{BatchNorm3d} shifts vs.\ analytical FP64-folded \texttt{ConvTranspose3d} biases across all four decoder blocks.}
     \label{fig:reg_affine}
 \end{figure*}
 
-\section{Numerical Fidelity and Analytical BatchNorm Folding}
+\section{Numerical Fidelity and Analytical FP64 BatchNorm Folding}
 \label{sec:numerics}
 
-\subsection{IEEE-754 FP32 vs.\ FP16 Arithmetic and Catastrophic Cancellation}
-An IEEE-754 floating-point number with $p$ significand bits ($p=24$ for binary32 \texttt{FP32} with 23 explicit mantissa bits; $p=11$ for binary16 \texttt{FP16} with 10 explicit mantissa bits) represents real values $x \in [2^E, 2^{E+1})$ with a discrete grid spacing (Unit in the Last Place, $\text{ULP}$) of:
+\subsection{IEEE-754 Binary16 Quantization Spacing and Catastrophic Cancellation}
+An IEEE-754 floating-point format with $p_{\text{sig}}$ significand bits ($p_{\text{sig}}=24$ for binary32 \texttt{FP32} with 23 explicit mantissa bits; $p_{\text{sig}}=11$ for binary16 \texttt{FP16} with 10 explicit mantissa bits) represents real magnitudes $x \in [2^E, 2^{E+1})$ with binade exponent $E = \lfloor \log_2 \lvert x \rvert \rfloor$ at discrete Unit in the Last Place ($\text{ULP}$, dimensionless step size) spacing:
 \begin{equation}
-    \text{ULP}(x) = 2^{E - (p - 1)} = \begin{cases}
+    \text{ULP}(x) = 2^{E - (p_{\text{sig}} - 1)} = \begin{cases}
     2^{E - 23} & \text{in IEEE-754 FP32} \\
     2^{E - 10} & \text{in IEEE-754 FP16}
     \end{cases}
 \end{equation}
-For magnitudes in $[64, 128)$ ($E = 6$), $\text{ULP}_{\text{FP32}} = 2^{-17} \approx 7.63 \times 10^{-6}$, whereas $\text{ULP}_{\text{FP16}} = 2^{6 - 10} = 2^{-4} = \mathbf{0.0625}$. When an intermediate neural network activation $y \approx +57.6$ is rounded to the FP16 grid ($\text{ULP}_{[32,64)} = 0.03125$) and added to an unfused shift of $-81.79$ ($\text{ULP}_{[64,128)} = 0.0625$) to produce a final logit near $+0.1$, subtracting two large numbers of opposite sign in 10-bit mantissa arithmetic destroys $6\text{--}7$ bits of relative precision (catastrophic cancellation).
+On the interval $[64, 128)$ ($E = 6$), $\text{ULP}_{\text{FP32}} = 2^{-17} \approx 7.63 \times 10^{-6}$, whereas $\text{ULP}_{\text{FP16}} = 2^{6 - 10} = 2^{-4} = \mathbf{0.0625}$. When a pre-normalization activation $Y_0 \approx +57.6$ is quantized to the FP16 grid ($\text{ULP}_{[32,64)} = 0.03125$) and summed with an unfused affine shift of $-81.79$ ($\text{ULP}_{[64,128)} = 0.0625$) to yield a small logit near $+0.1$, subtracting nearly equal large numbers of opposite sign in 10-bit mantissa arithmetic destroys $6\text{--}7$ bits of significand precision via catastrophic cancellation.
 
-\subsection{Discovery of Asymmetric ONNX Constant Folding in 3D U-Net Decoders}
-When compiling the unmodified ONNX graph (\texttt{opset 17}) into TensorRT 10.16 FP16 (\texttt{trt\_fp16\_unfolded}), we observed a statistically significant volumetric over-segmentation bias of $\mathbf{+1.6754 \pm 0.5531\textbf{ cm}^3}$ across $\mathbf{9/9}$ internal MSD validation scans ($p < 0.0001$) and $\mathbf{+1.5366 \pm 0.7680\textbf{ cm}^3}$ across $\mathbf{12/12}$ external unseen \texttt{FLARE22} scans ($\mathbf{+1.5961 \pm 0.6721\textbf{ cm}^3}$ across all $21/21$ patients). Layer-by-layer inspection of all 17 \texttt{BatchNorm3d} modules in \texttt{models/model.pt} revealed the root cause: PyTorch's ONNX constant folder fuses all \textbf{13 encoder \texttt{Conv3d+BatchNorm3d}} layers, but \textbf{leaves all 4 decoder \texttt{ConvTranspose3d+BatchNorm3d} layers unfused} (Table~\ref{tab:decoder_bn}). In the final 2-channel output block (\texttt{model.2.0.adn.N}), Channel 0 (background) has learned convolution bias $b_0 = +57.295700$ offset by BatchNorm running mean $\mu_0 = +57.618198$ ($\sigma_0^2 = 2.132934$, $\gamma_0 = +2.100127$, $\beta_0 = +1.063365$), yielding an unfused BatchNorm shift of:
+\subsection{Asymmetric ONNX Constant Folding in 3D U-Net Decoders}
+Compiling the standard PyTorch ONNX export (\texttt{opset 17}) into TensorRT 10.16 FP16 (\texttt{trt\_fp16\_unfolded}) produced a systematic volumetric dilation of $\mathbf{+1.6754 \pm 0.5531\textbf{ cm}^3}$ across $\mathbf{9/9}$ internal MSD validation scans ($p < 0.0001$) and $\mathbf{+1.5366 \pm 0.7680\textbf{ cm}^3}$ across $\mathbf{12/12}$ unseen external \texttt{FLARE22} scans ($\mathbf{+1.5961 \pm 0.6721\textbf{ cm}^3}$ across all $21/21$ pooled patients). Inspecting all 17 \texttt{BatchNorm3d} layers in \texttt{models/model.pt} revealed that PyTorch's ONNX constant folder fuses all \textbf{13 encoder \texttt{Conv3d+BatchNorm3d}} blocks, but \textbf{leaves all 4 decoder \texttt{ConvTranspose3d+BatchNorm3d} blocks unfused} (Table~\ref{tab:decoder_bn}). In the terminal 2-channel output head (\texttt{model.2.0.adn.N}), Channel 0 (background) carries convolution bias $b_0 = +57.295700$ against BatchNorm running mean $\mu_0 = +57.618198$ (variance $\sigma_0^2 = 2.132934$, weight $\gamma_0 = +2.100127$, bias $\beta_0 = +1.063365$, $\epsilon = 10^{-5}$), applying an unfused post-convolution shift:
 \begin{equation}
 \begin{aligned}
     \text{shift}_{\text{BN}, 0} &= \beta_0 - \frac{\gamma_0 \mu_0}{\sqrt{\sigma_0^2 + \epsilon}} \\
     &= 1.0634 - 57.6182 \times 1.4380 = \mathbf{-81.791538}
 \end{aligned}
 \end{equation}
-Similarly, Channel 1 (spleen foreground) has $b_1 = -18.385847$ and $\mu_1 = -18.462671$, yielding an unfused shift of $\mathbf{+16.595694}$ ($\text{ULP}_{[16,32)} = 0.015625$). In FP16, this asymmetric rounding shifts background logits by $-0.159$ and foreground logits by $+0.116$, widening the foreground margin $L_1 - L_0$ by $+0.275$ across organ boundaries.
+Simultaneously, Channel 1 (spleen foreground) carries $b_1 = -18.385847$ and $\mu_1 = -18.462671$, applying an unfused shift of $\mathbf{+16.595694}$ ($\text{ULP}_{[16,32)} = 0.015625$). In FP16 execution, this asymmetric rounding depresses background logits by $-0.159$ and elevates foreground logits by $+0.116$, widening the decision margin $L_1 - L_0$ by $+0.275$ around splenic boundaries.
 
-\subsection{Exact Mathematical Derivation of Analytical FP64 Weight Folding}
-In PyTorch, a 3D transposed convolution (\texttt{nn.ConvTranspose3d}) stores weights in layout $W \in \mathbb{R}^{C_{\text{in}} \times C_{\text{out}} \times k_D \times k_H \times k_W}$ and bias $\mathbf{b} \in \mathbb{R}^{C_{\text{out}}}$. For input activation $X$, the pre-BatchNorm output for channel $c \in \{0, \dots, C_{\text{out}}-1\}$ is:
-\begin{equation}
-    Y_c = \sum_{i=0}^{C_{\text{in}}-1} W_{i, c, :, :, :} *^\top X_i + b_c
-\end{equation}
-Followed immediately by \texttt{nn.BatchNorm3d} with running mean $\mu_c$, variance $\sigma_c^2$, scale $\gamma_c$, bias $\beta_c$, and $\epsilon = 10^{-5}$:
+\subsection{Exact Analytical FP64 Weight Folding Derivation}
+For a 3D transposed convolution (\texttt{nn.ConvTranspose3d}) with kernel tensor $W \in \mathbb{R}^{C_{\text{in}} \times C_{\text{out}} \times k_D \times k_H \times k_W}$ and bias $\mathbf{b} \in \mathbb{R}^{C_{\text{out}}}$ followed by \texttt{nn.BatchNorm3d} ($\boldsymbol{\gamma}, \boldsymbol{\beta}, \boldsymbol{\mu}, \boldsymbol{\sigma}^2, \epsilon = 10^{-5}$), let $s_c = \gamma_c / \sqrt{\sigma_c^2 + \epsilon}$. The pre-activation output $Z_c$ for output channel $c \in \{0, \dots, C_{\text{out}}-1\}$ given input feature map $X$ is:
 \begin{equation}
 \begin{aligned}
-    Z_c &= s_c (Y_c - \mu_c) + \beta_c, \quad s_c = \frac{\gamma_c}{\sqrt{\sigma_c^2 + \epsilon}} \\
+    Z_c &= s_c \left(\sum_{i=0}^{C_{\text{in}}-1} W_{i, c, :, :, :} *^\top X_i + b_c - \mu_c\right) + \beta_c \\
     &= \sum_{i=0}^{C_{\text{in}}-1} \underbrace{\left(W_{i, c, :, :, :} \cdot s_c\right)}_{\widetilde{W}_{i, c, :, :, :}} *^\top X_i + \underbrace{\big((b_c - \mu_c) s_c + \beta_c\big)}_{\widetilde{b}_c}
 \end{aligned}
 \label{eq:bn_fold}
 \end{equation}
-By promoting $W, \mathbf{b}, \boldsymbol{\gamma}, \boldsymbol{\beta}, \boldsymbol{\mu}, \boldsymbol{\sigma}^2$ to IEEE-754 \texttt{torch.float64} prior to ONNX export (\texttt{fold\_conv\_transpose\_batchnorm} in \texttt{src/medtrt/model.py}), computing $\widetilde{W}$ and $\widetilde{\mathbf{b}}$ in 53-bit mantissa precision where $(b_0 - \mu_0) = 57.295700 - 57.618198 = -0.322498$ is exact to $\sim 10^{-14}$, casting back to \texttt{float32}, and replacing \texttt{BatchNorm3d} with \texttt{nn.Identity()}, the $-81.79$ intermediate shift vanishes into $\widetilde{b}_0 = +0.599613$ and $\widetilde{b}_1 = -0.351193$ (Table~\ref{tab:decoder_bn}). In FP32, folded and unfolded networks agree to $\max |\Delta\text{logit}| = 1.43 \times 10^{-5}$. In TensorRT FP16, analytical folding reduces mean absolute logit error by $\mathbf{35.6\times}$ ($0.1377 \to 0.00387$) and reduces MSD volumetric bias from $+1.6754\text{ cm}^3$ to $\mathbf{+0.0010\textbf{ cm}^3}$.
+By promoting $W, \mathbf{b}, \boldsymbol{\gamma}, \boldsymbol{\beta}, \boldsymbol{\mu}, \boldsymbol{\sigma}^2$ to IEEE-754 \texttt{torch.float64} (53-bit significand) prior to ONNX export (\texttt{fold\_conv\_transpose\_batchnorm} in \texttt{src/medtrt/model.py}), evaluating $(b_0 - \mu_0) = -0.322498$ free of cancellation, casting $\widetilde{W}, \widetilde{\mathbf{b}}$ back to \texttt{float32}, and replacing \texttt{BatchNorm3d} with \texttt{nn.Identity()}, the $-81.79$ shift collapses into $\widetilde{b}_0 = +0.599613$ and $\widetilde{b}_1 = -0.351193$ (Table~\ref{tab:decoder_bn}). Strict FP32 outputs remain invariant ($\max \lvert \Delta\text{logit}\rvert = 1.43 \times 10^{-5}$; exported 53-node ONNX opset 17 graph $\max \lvert \Delta\text{logit}\rvert = 2.67 \times 10^{-5}$), while TensorRT FP16 mean absolute logit drift drops by $\mathbf{35.6\times}$ ($0.1377 \to 0.00387$) and internal MSD volumetric bias drops by over three orders of magnitude ($+1.6754\text{ cm}^3 \to +0.0010\text{ cm}^3$).
 
 \begin{table*}[t]
 \centering
-\caption{Exact parameters of all four decoder \texttt{ConvTranspose3d+BatchNorm3d} blocks in \texttt{spleen\_ct\_segmentation} v0.6.1 (\texttt{models/model.pt}), showing how analytical FP64 folding collapses the $-81.79$ and $+16.60$ intermediate shifts in \texttt{model.2.0} into well-scaled biases ($+0.600$ and $-0.351$).}
+\caption{Exact learned parameters of all four decoder \texttt{ConvTranspose3d+BatchNorm3d} blocks in \texttt{spleen\_ct\_segmentation} v0.6.1 (\texttt{models/model.pt}), demonstrating how analytical FP64 folding eliminates the $-81.79$ and $+16.60$ intermediate shifts in \texttt{model.2.0}.}
 \label{tab:decoder_bn}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccc}
@@ -281,48 +325,56 @@ By promoting $W, \mathbf{b}, \boldsymbol{\gamma}, \boldsymbol{\beta}, \boldsymbo
 \texttt{model.1.submodule.1.submodule.1.submodule.2.0} (Stage 1) & $64$ & $[-0.196, +0.448]$ & $[-0.196, +0.448]$ & $\max 1.3193$ & $[-0.5858, +0.3007]$ & $\max 0.2621$ \\
 \texttt{model.1.submodule.1.submodule.2.0} (Stage 2) & $32$ & $[-0.453, +0.395]$ & $[-0.453, +0.395]$ & $\max 1.6689$ & $[-0.5089, +0.6604]$ & $\max 0.2885$ \\
 \texttt{model.1.submodule.2.0} (Stage 3) & $16$ & $[-0.569, +0.431]$ & $[-0.569, +0.431]$ & $\max 1.6712$ & $[-0.6951, +0.9425]$ & $\max 0.2956$ \\
-\textbf{\texttt{model.2.0} --- Channel 0 (Background Head)} & $1$ (Ch0) & $\mathbf{+57.295700}$ & $\mathbf{+57.618198}$ & $\mathbf{+1.437999}$ & $\mathbf{-81.791538}$ ($\mathbf{-81.79}$) & $\mathbf{+0.599613}$ \\
-\textbf{\texttt{model.2.0} --- Channel 1 (Spleen Foreground Head)} & $1$ (Ch1) & $\mathbf{-18.385847}$ & $\mathbf{-18.462671}$ & $\mathbf{+0.921735}$ & $\mathbf{+16.595694}$ ($\mathbf{+16.60}$) & $\mathbf{-0.351193}$ \\
+\textbf{\texttt{model.2.0} (Channel 0: Background Head)} & $1$ (Ch0) & $\mathbf{+57.295700}$ & $\mathbf{+57.618198}$ & $\mathbf{+1.437999}$ & $\mathbf{-81.791538}$ ($\mathbf{-81.79}$) & $\mathbf{+0.599613}$ \\
+\textbf{\texttt{model.2.0} (Channel 1: Spleen Foreground Head)} & $1$ (Ch1) & $\mathbf{-18.385847}$ & $\mathbf{-18.462671}$ & $\mathbf{+0.921735}$ & $\mathbf{+16.595694}$ ($\mathbf{+16.60}$) & $\mathbf{-0.351193}$ \\
 \bottomrule
 \end{tabular}%
 }
 \end{table*}
 
-\section{Experimental Methodology and Eight Secondary Engineering Problems Resolved}
+\section{Experimental Methodology, Secondary Engineering Problems, and Verification Infrastructure}
 \label{sec:secondary_problems}
 
-\subsection{Hardware, Software Stack, and Two-Cohort Statistical Design}
-All benchmarks were executed on an \textbf{NVIDIA GeForce RTX 5080 Laptop GPU} (Blackwell architecture, compute capability $12.0$ / \texttt{sm\_120}, $60$ SMs, $15.92\text{ GB}$ / $16,302\text{ MB}$ GDDR7 VRAM, $90\text{ W}$ dynamic TGP limit, Windows 11 build \texttt{10.0.26300} in \texttt{WDDM} mode, NVIDIA Driver \texttt{591.44}, CUDA \texttt{12.8}, cuDNN \texttt{9.19.0}, TensorRT \texttt{10.16.1.11}, PyTorch \texttt{2.11.0+cu128}, MONAI \texttt{1.6.1}, Python \texttt{3.11.15}). Each profile executes 3 untimed warm-up scans followed by repeated timed passes across the 9 internal MSD validation scans ($90$ timed passes = $10 \times 9$ on GPU profiles; $18$ timed passes = $2 \times 9$ on CPU-bound host profiles in the committed \texttt{results/bench\_*.json} artifact set, with 90-pass host reference runs also documented in Table~\ref{tab:master}). Every stage is bracketed by hardware \texttt{torch.cuda.Event(enable\_timing=True)} pairs synchronized via \texttt{torch.cuda.synchronize()} and verified against host \texttt{time.perf\_counter()} wall-clock timers (worst median gap $0.26\%$).
+\subsection{Hardware Platform, Multi-Cohort Design, and Statistical Protocol}
+All measurements were collected on an \textbf{NVIDIA GeForce RTX 5080 Laptop GPU} (Blackwell architecture, compute capability $12.0$ / \texttt{sm\_120}, $60$ SMs, $15.92\text{ GB}$ / $16,302\text{ MB}$ GDDR7, $90\text{ W}$ dynamic TGP, Windows 11 build \texttt{10.0.26300} in \texttt{WDDM} mode, NVIDIA Driver \texttt{591.44}, CUDA \texttt{12.8}, cuDNN \texttt{9.19.0}, TensorRT \texttt{10.16.1.11}, PyTorch \texttt{2.11.0+cu128}, MONAI \texttt{1.6.1}, Python \texttt{3.11.15}). TensorRT engines were built with dynamic batch profiles $B \in [1, 8]$ (optimization profile $B=2$, serialized size $13.70\text{ MB}$). Each benchmark executes 3 untimed warm-up volumes followed by repeated timed passes across the 9 held-out MSD scans ($90$ timed passes $= 10 \times 9$ on GPU-transform profiles; $18$ timed passes $= 2 \times 9$ on CPU-bound host profiles in \texttt{results/bench\_*.json}). Every stage is bracketed by hardware \texttt{torch.cuda.Event(enable\_timing=True)} pairs synchronized via \texttt{torch.cuda.synchronize()} and cross-checked against host \texttt{time.perf\_counter()} wall-clock timers (worst median gap $0.26\%$). NVTX annotations are embedded in \texttt{src/medtrt/timing.py} for optional Nsight Systems capture, though all reported latencies derive directly from CUDA Event and wall-clock telemetry.
 
-To ensure statistical rigor, we separate pass-level timing precision from patient-level biological variation across two independent cohorts ($53$ total GPU-verified CT volumes):
+We strictly separate pass-level timing stability from patient-level biological variance across two independent CT cohorts ($53$ total GPU-verified volumes):
 \begin{itemize}
-    \item \textbf{Cohort 1 (Internal Held-Out MSD \texttt{Task09\_Spleen}, $N = 9$ validation / $41$ total CT scans):} Following \texttt{configs/train.json} (\texttt{@images[-9:]}), the last 9 alphanumerically sorted scans (\texttt{spleen\_56} to \texttt{spleen\_9}) have zero overlap with the 32 gradient-update training scans. Because official MSD test labels are not public and the upstream bundle selected \texttt{model.pt} using validation Dice on these 9 scans, absolute Dice ($0.9652$) is treated as an internal reference, while cross-backend differences against strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}) are exact.
-    \item \textbf{Cohort 2 (External Unseen Multi-Center MICCAI \texttt{FLARE22}, $N = 12$ CT scans):} We evaluate 12 unseen multi-center abdominal CT scans (\texttt{FLARE22\_Tr\_0001} to \texttt{0012}, $512 \times 512 \times 84\text{--}110$ voxels, spacing $0.64\text{--}0.86 \times 2.5\text{ mm}$, spleen volumes $130.8\text{--}481.7\text{ cm}^3$) from Zenodo Record \texttt{7860267} \cite{ma2023flare} archived on Google Drive (\texttt{results/external\_flare22\_validation.json}).
-    \item \textbf{Formal Paired TOST Equivalence Testing:} Because a non-significant two-sided $t$-test ($p = 0.885$) cannot prove equivalence, we perform paired Two One-Sided Tests (TOST) \cite{schuirmann1987} at $\alpha = 0.05$ with margins $\Delta_V = \pm 0.10\text{ cm}^3$ and $\pm 0.50\text{ cm}^3$, and $\Delta_{\text{Dice}} = \pm 0.0010$ and $\pm 0.0050$.
+    \item \textbf{Cohort 1 (Internal MSD \texttt{Task09\_Spleen}, $N = 9$ validation / $41$ total CT scans):} Per upstream \texttt{configs/train.json} (\texttt{@images[-9:]}), the final 9 alphanumerically sorted scans (\texttt{spleen\_56} to \texttt{spleen\_9}) have zero overlap with the 32 gradient-update training scans. Because MSD test labels (\texttt{imagesTs}) are unannotated and upstream checkpoint selection used validation Dice on these 9 scans, absolute Dice ($0.9652$) serves as an internal baseline, whereas cross-backend deltas against strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}) are exact.
+    \item \textbf{Cohort 2 (External Unseen MICCAI \texttt{FLARE22}, $N = 12$ Multi-Center CT scans):} We evaluate 12 independent multi-center abdominal CT scans (\texttt{FLARE22\_Tr\_0001} to \texttt{0012}, $512 \times 512 \times 84\text{--}110$ voxels, spacing $0.64\text{--}0.86 \times 2.5\text{ mm}$, ground-truth spleen volumes $130.8\text{--}481.7\text{ cm}^3$) from Zenodo Record \texttt{7860267} \cite{ma2023flare}, streamed from cloud-mounted virtual storage (\texttt{results/external\_flare22\_validation.json}).
+    \item \textbf{Formal Paired TOST Equivalence:} Because a non-significant two-sided $t$-test ($p = 0.885$) cannot prove numerical equivalence, we perform paired Two One-Sided Tests (TOST) \cite{schuirmann1987} at $\alpha = 0.05$ ($90\%$ confidence bounds) with margins $\Delta_V = \pm 0.10\text{ cm}^3$ ($< 0.04\%$ of mean spleen volume) and $\pm 0.50\text{ cm}^3$, plus $\Delta_{\text{Dice}} = \pm 0.0010$ and $\pm 0.0050$.
 \end{itemize}
 
-\subsection{Eight Secondary Engineering \& Methodological Problems Resolved}
-During the investigation, we identified and resolved eight additional engineering problems:
-\begin{enumerate}[label=\textbf{Problem \Alph* ---},wide=0pt]
-    \item \textbf{Deferred \texttt{mmap} Page-Fault Accounting \& Three-Regime I/O Decomposition:} Opening pre-decompressed \texttt{.nii} files with \texttt{nibabel.load(..., mmap=True)} drops \texttt{load} to $1.47\text{ ms}$ while increasing \texttt{h2d} from $3.76\text{ ms}$ to $27.62\text{ ms}$ because OS virtual memory pages fault lazily during PCIe transfer. We therefore report combined \texttt{ingest} $= \texttt{load} + \texttt{h2d}$ ($29.18\text{ ms}$ warm median) alongside standalone CPU \texttt{.nii.gz} decompression ($264.95\text{ ms}$) and cold unbuffered \texttt{.nii} disk reads ($23.83\text{ ms}$ on local NVMe).
-    \item \textbf{Staircase Aliasing in Nearest-Neighbor Discrete Label Inversion (\texttt{trt\_fp16\_nn}):} Applying \texttt{argmax} at $1.5 \times 1.5 \times 2.0\text{ mm}$ before nearest-neighbor inversion (\texttt{trt\_fp16\_nn}) degrades Mean Dice by $\mathbf{-0.005004}$ ($0.965233 \to 0.960230$, violating the $0.005$ tolerance on $4/9$ cases). Our single-channel convex trilinear kernel (\texttt{fused\_invert\_trilinear\_threshold\_u8}) preserves $100\%$ trilinear accuracy in $2.62\text{ ms}$.
-    \item \textbf{Paradoxical Masking of the $+1.68\text{ cm}^3$ FP16 Bug by Ground-Truth Capsule Under-Segmentation:} Because the pretrained 3D U-Net under-segments the outer 1-voxel splenic capsule relative to human ground truth ($V_{\text{FP32}} - V_{\text{GT}} = -5.17 \pm 5.18\text{ cm}^3$), the buggy unfolded engine's $+1.68\text{ cm}^3$ dilation partially canceled against ground truth (yielding an artificially lower MAE of $4.24\text{ cm}^3$ vs.\ $5.17\text{ cm}^3$). Dual Bland--Altman + TOST analysis against strict FP32 cleanly separates anatomical error from quantization bias.
-    \item \textbf{The ``All-Zeros / Blank Patch'' Unit-Test Trap:} Synthetic zero tensors fail to excite decoder activations or expose the $-81.79$ cancellation. In \texttt{tests/test\_engine\_accuracy.py}, we test real anatomical patches centered on the spleen center of mass in \texttt{spleen\_6} (\texttt{patch.std() > 0.05}) and audit all $169$ sliding-window batches ($\text{probability\_mae} = 1.66 \times 10^{-6}$).
-    \item \textbf{TensorRT 10.x Default-Stream Serialization \& Laptop GPU DVFS Clock-State Inflation (\texttt{P0} $\to$ \texttt{P4/P8}):} During the $\sim 2.7\text{ s}$ CPU resampling gap on the host path, the laptop GPU downclocks to idle states, inflating subsequent network execution by $\mathbf{1.13\times}$ after a 3-second idle gap ($290.7\text{ ms} \to 328.0\text{ ms}$ on TensorRT; $1,119.7\text{ ms} \to 1,267.6\text{ ms}$ on TF32). We bind TensorRT to a dedicated non-default CUDA stream (\texttt{self.exec\_stream}) synchronized via CUDA events.
-    \item \textbf{Confounded Speedup Claims \& Non-Additivity of Marginal Stage Medians ($\sum_k \text{median}(T_k) \neq \text{median}(\sum_k T_k)$):} We strictly separate controlled matched-window speedups (\texttt{trt\_fp16\_cuda}, $\text{overlap}=0.5, B=4$, $665$ windows: $30.67\times$ cohort median / $33.14\times$ paired mean) from modified fast-window speedups (\texttt{trt\_fp16\_optimized}, $\text{overlap}=0.25, B=8$, $369$ windows: $42.86\times$ cohort median / $46.64\times$ paired median) and report all six stages explicitly in Table~\ref{tab:master}.
-    \item \textbf{False-Positive / False-Negative Volumetric Cancellation at the Splenic Hilum (\texttt{spleen\_62} vs.\ \texttt{spleen\_56}):} In \texttt{spleen\_62} (Dice $0.9611$, $\text{HD95} = 2.44\text{ mm}$), $4,566$ FP voxels and $4,821$ FN voxels along the splenic hilum cancel to $-0.58\text{ cm}^3$ net volume error, whereas in \texttt{spleen\_56} ($7.0\text{ mm}$ slices, Dice $0.9361$), $40.1\%$ of all error voxels lie in the 1 extreme polar slice at each dome. We therefore pair volumetric bias with 3D surface distance metrics (\texttt{HD95}, \texttt{ASSD}, \texttt{NSD}).
-    \item \textbf{Process-Wide PyTorch TF32 Flag Bleed Across Cached Streamlit Predictors:} Because \texttt{allow\_tf32} flags are process-wide globals, we invoke \texttt{apply\_precision(profile)} on every cached prediction call in \texttt{app/workstation.py} and enforce precision isolation in \texttt{tests/test\_workstation.py}.
+\subsection{Eight Secondary Engineering and Methodological Problems Resolved}
+Beyond our three primary contributions, engineering MedTRT required resolving eight subtle systems and validation pitfalls:
+\begin{enumerate}[label=\textbf{Problem \Alph*:},wide=0pt]
+    \item \textbf{Deferred \texttt{mmap} Page-Fault Accounting \& Three-Regime I/O Decomposition:} Opening \texttt{.nii} files with \texttt{nibabel.load(..., mmap=True)} reduces \texttt{load} to $1.47\text{ ms}$ while raising \texttt{h2d} from $3.76\text{ ms}$ to $27.62\text{ ms}$ because OS virtual pages fault lazily during PCIe DMA transfer. We therefore report combined $\texttt{ingest} = \texttt{load} + \texttt{h2d}$ ($29.18\text{ ms}$ warm median) alongside standalone CPU \texttt{.nii.gz} decompression ($264.95\text{ ms}$) and cold unbuffered NVMe \texttt{.nii} reads ($23.83\text{ ms}$).
+    \item \textbf{Staircase Aliasing in Nearest-Neighbor Discrete Inversion (\texttt{trt\_fp16\_nn}):} Discretizing at $1.5 \times 1.5 \times 2.0\text{ mm}$ prior to nearest-neighbor inversion (\texttt{trt\_fp16\_nn}) degrades Mean Dice by $\mathbf{-0.005004}$ ($0.965233 \to 0.960230$, violating the $0.005$ tolerance on $4/9$ scans). Kernel \#7 (\texttt{fused\_invert\_trilinear\_threshold\_u8}) preserves $100\%$ trilinear boundary smoothness in $2.62\text{ ms}$.
+    \item \textbf{Paradoxical Masking of the $+1.68\text{ cm}^3$ FP16 Bug by Ground-Truth Capsule Under-Segmentation:} Because the pretrained 3D U-Net has higher precision ($0.9746$) than sensitivity ($0.9562$) and under-segments the outer 1-voxel splenic capsule relative to human annotations ($V_{\text{FP32}} - V_{\text{GT}} = -5.17 \pm 5.18\text{ cm}^3$), the buggy unfolded engine's $+1.68\text{ cm}^3$ dilation partially canceled against ground truth (yielding a deceptively lower MAE vs.\ GT of $4.24\text{ cm}^3$ vs.\ $5.17\text{ cm}^3$, Table~\ref{tab:metrics10}). Dual Bland--Altman and TOST testing against strict FP32 isolates numerical quantization drift from model anatomy error.
+    \item \textbf{The ``All-Zeros / Blank Patch'' Unit-Test Trap:} Zero-filled synthetic tensors fail to excite decoder activations or trigger the $-81.79$ cancellation. In \texttt{tests/test\_engine\_accuracy.py}, we extract real anatomical patches centered on the spleen center of mass in \texttt{spleen\_6} (\texttt{patch.std() > 0.05}) and verify all $169$ sliding-window batches ($\text{probability\_mae} = 1.66 \times 10^{-6}$).
+    \item \textbf{TensorRT 10.x Default-Stream Serialization \& Laptop GPU DVFS Clock Inflation (\texttt{P0} $\to$ \texttt{P4/P8}):} During the $\sim 2.7\text{ s}$ CPU resampling gap on host profiles, the laptop GPU downclocks to idle power states, inflating subsequent network execution by $\mathbf{1.13\times}$ after a $3\text{ s}$ idle interval ($290.7\text{ ms} \to 328.0\text{ ms}$ on TensorRT; $1,119.7\text{ ms} \to 1,267.6\text{ ms}$ on TF32). We bind TensorRT \texttt{execute\_async\_v3} to a dedicated non-default CUDA stream (\texttt{self.exec\_stream}) synchronized via hardware events.
+    \item \textbf{Confounded Speedup Claims \& Non-Additivity of Marginal Stage Medians ($\sum_k \text{median}(T_k) \neq \text{median}(\sum_k T_k)$):} Across heterogeneous slice counts ($Z \in [31, 135]$), marginal stage medians do not sum to the median of end-to-end pass totals ($29.2 + 1.3 + 49.0 + 6.1 + 2.6 = 88.2\text{ ms}$ vs.\ $96.3\text{ ms}$ E2E in \texttt{trt\_fp16\_cuda}). We report all six stages explicitly and strictly separate matched-window speedups ($\omega=0.5, B=4$: $30.67\times$ cohort / $33.14\times$ paired mean) from fast-window speedups ($\omega=0.25, B=8$: $42.86\times$ cohort / $46.64\times$ paired median).
+    \item \textbf{False-Positive / False-Negative Volumetric Cancellation at the Splenic Hilum (\texttt{spleen\_62} vs.\ \texttt{spleen\_56}):} In \texttt{spleen\_62} (Dice $0.9611$, $\text{HD}_{95} = 2.44\text{ mm}$), $4,566$ FP voxels and $4,821$ FN voxels along hilar vessels cancel to $-0.58\text{ cm}^3$ net volume error, whereas in \texttt{spleen\_56} ($7.0\text{ mm}$ slices, Dice $0.9361$), $40\%$ of error voxels concentrate in the single polar slice at each dome. Volumetric agreement must therefore be paired with surface distance metrics ($\text{HD}_{95}$, $\text{ASSD}$).
+    \item \textbf{Process-Wide PyTorch TF32 Flag Bleed Across Cached Streamlit Predictors:} Because \texttt{torch.backends.cudnn.allow\_tf32} is a process-global flag, caching multiple predictors in Streamlit caused TF32 state bleed until we enforced \texttt{apply\_precision(profile)} per inference call in \texttt{app/workstation.py} and verified isolation in \texttt{tests/test\_workstation.py}.
+\end{enumerate}
+
+\subsection{Software Architecture, 3D Tri-Planar Workstation, and Automated Claim Verification}
+To make MedTRT self-auditing and directly usable by researchers, the repository integrates three software layers:
+\begin{enumerate}
+    \item \textbf{Fingerprinted Core Package (\texttt{src/medtrt/}):} Eight frozen measurement modules (\texttt{bench.py}, \texttt{data.py}, \texttt{evaluate.py}, \texttt{infer.py}, \texttt{model.py}, \texttt{profiles.py}, \texttt{timing.py}, \texttt{trt\_runner.py}) are hashed via normalized SHA-256 (\texttt{code\_fingerprint = e9d4f060aaf1b130}) alongside the compiled engine (\texttt{engine\_fingerprint = 28d585aaed46e401}) and stamped into all 29 JSON/CSV telemetry artifacts in \texttt{results/}.
+    \item \textbf{Interactive 3D Tri-Planar Workstation \& Telemetry Dashboard (\texttt{app/viewer.py}, \texttt{app/workstation.py}, \texttt{app/dashboard/}):} A 10-page interactive analytics dashboard and radiological review workstation providing synchronized axial, coronal, and sagittal slice navigation, decoupled screen-only HU windowing presets (Soft Tissue $W=400, L=40$; Bone $W=1800, L=400$; Lung $W=1500, L=-600$), 1-pixel contour overlays, live side-by-side backend comparison with signed-boundary-distance FP32-vs-FP16 voxel difference heatmaps, and automatic suppression of ground-truth metrics on unlabeled uploads.
+    \item \textbf{Offline Claim Verifier \& CI Suite (\texttt{src/medtrt/verify\_claims.py}, \texttt{tests/}):} Running \texttt{python -m medtrt.verify\_claims} executes 14 deterministic checks (verifying single code/engine provenance, recomputing medians and Bland--Altman/TOST bounds from raw passes, checking zero training-split leakage, confirming \texttt{README.md} byte-identity with \texttt{report.py}, and scanning for local path leaks or unsupported clinical language), complemented by 66 \texttt{pytest} tests and GitHub Actions CI (\texttt{.github/workflows/ci.yml}).
 \end{enumerate}
 
 \section{Quantitative Results}
 \label{sec:results}
 
-\subsection{End-to-End Pipeline Latency, Ablation, and Multi-Cohort Scaling}
-Tables~\ref{tab:master}--\ref{tab:scaling53} and Figures~\ref{fig:stage_ablation}--\ref{fig:mem_pareto} present our primary experimental results:
+\subsection{End-to-End Pipeline Latency, Ablation, and 53-Volume Scaling}
+Tables~\ref{tab:master}--\ref{tab:scaling53} and Figures~\ref{fig:stage_ablation} and \ref{fig:mem_pareto} summarize end-to-end performance across all 13 profiles and 53 CT volumes:
 \begin{enumerate}
-    \item \textbf{Controlled Like-for-Like Acceleration (\texttt{trt\_fp16\_cuda}, $\text{overlap}=0.5, B=4$):} Holding sliding-window overlap ($0.5$), batch size ($4$), and total patch evaluations ($665$ windows across the 9 MSD scans) identical to the baseline host pipeline (\texttt{pytorch\_fp32}, $2,952.0\text{ ms}$ median E2E; strict IEEE FP32 \texttt{pytorch\_fp32\_strict}, $3,049.8\text{ ms}$), \texttt{trt\_fp16\_cuda} achieves a cohort median latency of $\mathbf{96.3\textbf{ ms}}$ (IQR $58.9\text{ ms}$, range $47.6\text{--}162.4\text{ ms}$). This represents a $\mathbf{30.67\times}$ cohort median speedup over \texttt{pytorch\_fp32} ($\mathbf{31.68\times}$ over \texttt{pytorch\_fp32\_strict}), a paired patient-level mean speedup of $\mathbf{33.14\times}$ ($95\%$ CI $[27.61\times, 38.67\times]$, median $31.00\times$, range $26.19\times\text{--}49.79\times$ in Table~\ref{tab:percase}), and a $35.13\times$ speedup relative to the $3,341.1\text{ ms}$ 90-pass host reference run. Compared against MONAI's GPU pipeline (\texttt{trt\_fp16\_gpu}, $215.5\text{ ms}$), our custom CUDA kernels accelerate E2E execution by $2.24\times$ while reducing peak allocated VRAM from $2,301\text{ MB}$ to $\mathbf{455\textbf{ MB}}$ ($\mathbf{5.06\times}$ reduction).
-    \item \textbf{Higher-Throughput Fast-Window Operating Point (\texttt{trt\_fp16\_optimized}, $\text{overlap}=0.25, B=8$):} Reducing patch overlap from $0.50$ to $0.25$ and increasing batch size to $8$ reduces total patch evaluations from $665$ to $369$ ($1.80\times$ fewer patches), lowering cohort median latency to $\mathbf{68.9\textbf{ ms}}$ (IQR $50.5\text{ ms}$, slowest pass $122.6\text{ ms}$ across all 90 passes, $\mathbf{42.86\times}$ cohort speedup, paired patient-level median speedup $\mathbf{46.64\times}$, mean $\mathbf{44.87\times}$, $95\%$ CI $[38.69\times, 51.05\times]$; and $54.92\times$ at $60.8\text{ ms}$ in the earlier 90-pass host run) at $522\text{ MB}$ peak VRAM, with a small $-0.000455$ Mean Dice shift ($0.964778$ vs.\ $0.965233$).
-    \item \textbf{Scaling Across All 53 CT Volumes (Table~\ref{tab:scaling53}):} Across all $41$ MSD patient scans ($8.13\text{M}\text{--}44.04\text{M}$ voxels, $31\text{--}168$ slices), \texttt{trt\_fp16\_optimized} achieves $\mathbf{87.44\textbf{ ms}}$ median E2E latency ($1.59\text{ ms}$ CUDA preprocess, $33.83\text{ ms}$ network, $3.28\text{ ms}$ CUDA postprocess, $450.6\text{ MB}$ median / $630.8\text{ MB}$ max VRAM). Across the $12$ external \texttt{FLARE22} scans streamed from Google Drive, \texttt{trt\_fp16\_cuda} achieves a $\mathbf{21.52\times}$ paired speedup ($5,422.9\text{ ms} \to 252.6\text{ ms}$, where $175.4\text{ ms}$ is Google Drive virtual-filesystem I/O and only $2.75\text{ ms}$ is CUDA preprocessing and $3.38\text{ ms}$ is CUDA postprocessing) and cuts peak VRAM by $\mathbf{4.56\times}$ ($1,885\text{ MB} \to 414\text{ MB}$).
+    \item \textbf{Controlled Like-for-Like Speedup (\texttt{trt\_fp16\_cuda}, $\omega=0.5, B=4$):} Keeping sliding-window overlap ($0.5$), batch size ($4$), and total patch evaluations ($665$ windows across the 9 MSD scans) identical to \texttt{pytorch\_fp32} ($2,952.0\text{ ms}$ median E2E) and \texttt{pytorch\_fp32\_strict} ($3,049.8\text{ ms}$), \texttt{trt\_fp16\_cuda} achieves $\mathbf{96.3\textbf{ ms}}$ cohort median latency (IQR $58.9\text{ ms}$, per-case range $47.6\text{--}162.4\text{ ms}$, slowest pass $232.6\text{ ms}$). This yields a $\mathbf{30.67\times}$ cohort median speedup ($\mathbf{31.68\times}$ vs.\ strict FP32) and a paired patient-level mean speedup of $\mathbf{33.14\times}$ ($95\%$ CI $[27.61\times, 38.67\times]$, median $31.00\times$, range $26.19\times\text{--}49.79\times$, Table~\ref{tab:percase}). Relative to MONAI's GPU pipeline (\texttt{trt\_fp16\_gpu}, $215.5\text{ ms}$), custom register-affine CUDA kernels accelerate E2E inference by $2.24\times$ while slashing peak allocated VRAM by $\mathbf{5.06\times}$ ($2,301\text{ MB} \to \mathbf{455\textbf{ MB}}$).
+    \item \textbf{Fast-Window Operating Point (\texttt{trt\_\allowbreak fp16\_\allowbreak optimized}, $\omega=0.25, B=8$) \& 12-Point Pareto Sweep:} Across a 12-configuration sweep over $\omega \in \{0.25, 0.50, 0.75\} \times B \in \{1, 2, 4, 8\}$ (\texttt{results/\allowbreak sweep.csv}, Figure~\ref{fig:mem_pareto} Top Right), $(\omega=0.50, B=4)$ ($66.5\text{ ms}$ SW, Dice $0.965229$) and $(\omega=0.25, B=4)$ ($30.4\text{ ms}$ SW, Dice $0.964778$) form the measured Pareto frontier. Selecting $(\omega=0.25, B=8)$ for \texttt{trt\_\allowbreak fp16\_\allowbreak optimized} reduces patch evaluations from $665$ to $369$ ($1.80\times$ fewer patches) and achieves $\mathbf{68.9\textbf{ ms}}$ median E2E latency (IQR $50.5\text{ ms}$, slowest pass $122.6\text{ ms}$ across all 90 passes, $\mathbf{42.86\times}$ cohort speedup, $\mathbf{44.87\times}$ paired mean speedup, $\mathbf{46.64\times}$ paired median speedup) at $522\text{ MB}$ peak VRAM with a $-0.000455$ Mean Dice trade-off.
+    \item \textbf{Multi-Cohort Scaling Across All 53 CT Volumes (Table~\ref{tab:scaling53}):} Across all 41 MSD patient scans ($8.13\text{M}\text{--}44.04\text{M}$ voxels, $31\text{--}168$ slices), \texttt{trt\_fp16\_optimized} maintains $\mathbf{87.44\textbf{ ms}}$ median E2E latency ($1.59\text{ ms}$ CUDA preprocess, $33.83\text{ ms}$ network, $3.28\text{ ms}$ CUDA postprocess, $450.6\text{ MB}$ median / $630.8\text{ MB}$ max VRAM). Across the 12 unseen external \texttt{FLARE22} volumes streamed over virtualized cloud-drive storage, \texttt{trt\_fp16\_cuda} achieves a $\mathbf{21.52\times}$ paired speedup ($5,422.9\text{ ms} \to 252.6\text{ ms}$, where $175.4\text{ ms}$ is cloud-drive I/O and only $2.75\text{ ms}$ and $3.38\text{ ms}$ are CUDA preprocessing and postprocessing; $220.6\text{ ms}$ / $24.29\times$ on \texttt{optimized}) while cutting peak VRAM by $\mathbf{4.56\times}$ ($1,885\text{ MB} \to 414\text{ MB}$).
 \end{enumerate}
 
 \begin{figure*}[t]
@@ -331,32 +383,32 @@ Tables~\ref{tab:master}--\ref{tab:scaling53} and Figures~\ref{fig:stage_ablation
     \includegraphics[width=0.46\textwidth]{figures/ablation_waterfall.png}\\[3pt]
     \includegraphics[width=0.46\textwidth]{figures/backend_latency_speedup.png}\hfill
     \includegraphics[width=0.46\textwidth]{figures/cuda_kernel_scaling.png}
-    \caption{\textbf{Top Left:} Per-stage median latency breakdown across execution profiles on Cohort 1 ($N=9$ MSD CT scans). \textbf{Top Right:} Controlled 9-step ablation waterfall isolating the latency contribution of each systems optimization. \textbf{Bottom Left:} End-to-end backend latency distribution and speedup across profiles. \textbf{Bottom Right:} Custom CUDA C++17 kernel execution latency and VRAM scaling vs.\ PyTorch and MONAI GPU transforms.}
+    \caption{\textbf{Top Left:} Six-stage median latency decomposition across host and GPU execution paths on Cohort 1 ($N=9$ MSD scans). \textbf{Top Right:} Controlled one-factor-at-a-time ablation waterfall isolating the latency impact of each systems optimization. \textbf{Bottom Left:} End-to-end latency and speedup across all 13 benchmarked profiles. \textbf{Bottom Right:} Custom CUDA C++17 kernel latency and VRAM scaling across CT volume sizes vs.\ PyTorch and MONAI GPU transforms.}
     \label{fig:stage_ablation}
-    \label{fig:latency_cuda}
 \end{figure*}
 
 \begin{table*}[t]
 \centering
-\caption{Master benchmark and quantitative validation summary on Cohort 1 (MSD \texttt{Task09\_Spleen}, $N = 9$ validation patients on RTX 5080 Laptop GPU). All six pipeline stages are shown explicitly (\texttt{Ingest} $= \texttt{load} + \texttt{h2d}$). Note: In committed \texttt{results/bench\_*.json}, GPU profiles execute 90 timed passes ($10 \times 9$) and CPU-bound host profiles execute 18 timed passes ($2 \times 9$); in the 90-pass host reference run, \texttt{pytorch\_fp32} E2E was $3,341.1\text{ ms}$ ($\texttt{sw\_network}=260.8\text{ ms}$, $\texttt{preprocess}=284.4\text{ ms}$, $\texttt{postprocess}=2,195.3\text{ ms}$), yielding $35.13\times$ matched ($95.1\text{ ms}$) and $54.92\times$ fast ($60.8\text{ ms}$) speedups.}
+\caption{Complete 13-profile benchmark and volumetric validation matrix on Cohort 1 (MSD \texttt{Task09\_Spleen}, $N = 9$ held-out patients on RTX 5080 Laptop GPU). All six pipeline stages are reported explicitly ($\texttt{Ingest} = \texttt{load} + \texttt{h2d}$). GPU-path profiles execute 90 timed passes ($10 \times 9$) and CPU-bound host profiles execute 18 timed passes ($2 \times 9$) in \texttt{results/bench\_*.json} (90-pass host reference runs at $3,341.1\text{ ms}$ E2E are archived in \texttt{docs/CLAIM\_VERIFICATION\_REPORT.md}).}
 \label{tab:master}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccccccccc}
 \toprule
-\textbf{Profile} & \textbf{Path / I/O} & \textbf{Win/B} & \textbf{Ingest} & \textbf{Pre} & \textbf{Net} & \textbf{Agg} & \textbf{Post} & \textbf{E2E Med [IQR] (ms)} & \textbf{Cohort / Paired Speedup} & \textbf{VRAM} & \textbf{Mean Dice $\pm$ SD} & \textbf{Vol Bias vs.\ FP32 Ref} \\
+\textbf{Profile} & \textbf{Path / I/O} & \textbf{Win / $B$} & \textbf{Ingest} & \textbf{Pre} & \textbf{Net} & \textbf{Agg} & \textbf{Post} & \textbf{E2E Med [IQR] (ms)} & \textbf{Cohort / Paired Speedup} & \textbf{Peak VRAM} & \textbf{Mean Dice $\pm$ SD} & \textbf{Vol Bias vs.\ FP32 Ref} \\
 \midrule
-\texttt{pytorch\_fp32\_strict} & CPU / gzip & $0.5/4$ & $367.4$ & $288.0$ & $379.9$ & $8.4$ & $2024.8$ & $3049.8$ [$3235.4$] & $0.97\times$ / $0.97\times$ & $490\text{ MB}$ & $0.965233 \pm 0.0117$ & Reference ($0.000\text{ cm}^3$) \\
-\texttt{pytorch\_fp32} & CPU / gzip & $0.5/4$ & $424.7$ & $286.4$ & $254.6$ & $8.0$ & $1990.4$ & $2952.0$ [$2970.8$] & $1.00\times$ / $1.00\times$ & $487\text{ MB}$ & $0.965228 \pm 0.0117$ & $+0.005 \pm 0.004\text{ cm}^3$ \\
-\texttt{pytorch\_amp} & CPU / gzip & $0.5/4$ & $419.7$ & $271.7$ & $213.4$ & $8.0$ & $2013.6$ & $2916.1$ [$2954.5$] & $1.01\times$ / $1.01\times$ & $457\text{ MB}$ & $0.965217 \pm 0.0118$ & $+0.003 \pm 0.011\text{ cm}^3$ \\
-\texttt{pytorch\_fp16} & CPU / gzip & $0.5/4$ & $340.1$ & $281.6$ & $213.9$ & $12.6$ & $1993.2$ & $2885.5$ [$2822.2$] & $1.02\times$ / $1.02\times$ & $458\text{ MB}$ & $0.965231 \pm 0.0118$ & $+0.003 \pm 0.012\text{ cm}^3$ \\
-\texttt{trt\_fp32} & CPU / gzip & $0.5/4$ & $373.0$ & $276.7$ & $239.8$ & $8.2$ & $1981.5$ & $2940.0$ [$3003.2$] & $1.00\times$ / $1.00\times$ & $368\text{ MB}$ & $0.965233 \pm 0.0117$ & $+0.000 \pm 0.000\text{ cm}^3$ \\
+\texttt{pytorch\_fp32\_strict} & CPU / gzip & $0.5/4$ & $367.4$ & $288.0$ & $379.9$ & $8.4$ & $2024.8$ & $3049.8$ [$3235.4$] & $0.97\times$ / $0.94\times$ & $490\text{ MB}$ & $0.965233 \pm 0.0117$ & Reference ($0.000\text{ cm}^3$) \\
+\texttt{pytorch\_fp32} & CPU / gzip & $0.5/4$ & $424.7$ & $286.4$ & $254.6$ & $8.0$ & $1990.4$ & $2,952.0$ [$2970.8$] & $1.00\times$ / $1.00\times$ & $487\text{ MB}$ & $0.965228 \pm 0.0117$ & $+0.005 \pm 0.004\text{ cm}^3$ \\
+\texttt{pytorch\_tf32} & CPU / gzip & $0.5/4$ & $424.7$ & $286.4$ & $254.6$ & $8.0$ & $1990.4$ & $2,952.0$ [$2970.8$] & $1.00\times$ / $1.00\times$ & $487\text{ MB}$ & $0.965228 \pm 0.0117$ & $+0.005 \pm 0.004\text{ cm}^3$ \\
+\texttt{pytorch\_amp} & CPU / gzip & $0.5/4$ & $419.7$ & $271.7$ & $213.4$ & $9.1$ & $2013.6$ & $2916.1$ [$2954.5$] & $1.01\times$ / $0.99\times$ & $457\text{ MB}$ & $0.965217 \pm 0.0118$ & $+0.003 \pm 0.011\text{ cm}^3$ \\
+\texttt{pytorch\_fp16} & CPU / gzip & $0.5/4$ & $340.1$ & $281.6$ & $213.9$ & $9.6$ & $1993.2$ & $2885.5$ [$2822.2$] & $1.02\times$ / $1.01\times$ & $458\text{ MB}$ & $0.965231 \pm 0.0118$ & $+0.025 \pm 0.015\text{ cm}^3$ \\
+\texttt{trt\_fp32} & CPU / gzip & $0.5/4$ & $373.0$ & $276.7$ & $239.8$ & $8.9$ & $1981.5$ & $2940.0$ [$3003.2$] & $1.00\times$ / $1.00\times$ & $368\text{ MB}$ & $0.965233 \pm 0.0117$ & $+0.000 \pm 0.000\text{ cm}^3$ \\
 \texttt{trt\_fp16\_unfolded} (Bug) & CPU / gzip & $0.5/4$ & $406.5$ & $273.2$ & $176.7$ & $36.7$ & $1994.5$ & $2866.4$ [$2909.5$] & $1.03\times$ / $1.03\times$ & $359\text{ MB}$ & $0.965722 \pm 0.0120$ & $\mathbf{+1.675 \pm 0.553\textbf{ cm}^3}$ \\
-\texttt{trt\_fp16} (Folded) & CPU / gzip & $0.5/4$ & $385.1$ & $266.8$ & $167.1$ & $36.0$ & $1993.9$ & $2880.3$ [$2893.9$] & $1.02\times$ / $1.03\times$ & $359\text{ MB}$ & $0.965226 \pm 0.0117$ & $+0.003 \pm 0.022\text{ cm}^3$ \\
-\texttt{pytorch\_tf32\_gpu} & GPU / mmap & $0.5/4$ & $38.8$ & $54.4$ & $197.0$ & $6.5$ & $62.2$ & $357.9$ [$244.6$] & $8.25\times$ / $8.77\times$ & $2307\text{ MB}$ & $0.965227 \pm 0.0117$ & $+0.001 \pm 0.004\text{ cm}^3$ \\
-\texttt{trt\_fp16\_gpu} & GPU / mmap & $0.5/4$ & $38.9$ & $43.9$ & $47.6$ & $6.5$ & $71.1$ & $215.5$ [$173.7$] & $13.70\times$ / $14.81\times$ & $2301\text{ MB}$ & $0.965228 \pm 0.0117$ & $+0.001 \pm 0.017\text{ cm}^3$ \\
+\texttt{trt\_fp16} (Folded) & CPU / gzip & $0.5/4$ & $385.1$ & $266.8$ & $167.1$ & $36.0$ & $1993.9$ & $2880.3$ [$2893.9$] & $1.02\times$ / $1.04\times$ & $359\text{ MB}$ & $0.965226 \pm 0.0117$ & $+0.003 \pm 0.022\text{ cm}^3$ \\
+\texttt{pytorch\_tf32\_gpu} & GPU / mmap & $0.5/4$ & $38.8$ & $54.4$ & $197.0$ & $6.5$ & $62.2$ & $357.9$ [$244.6$] & $8.25\times$ / $8.76\times$ & $2,307\text{ MB}$ & $0.965227 \pm 0.0117$ & $+0.003 \pm 0.005\text{ cm}^3$ \\
+\texttt{trt\_fp16\_gpu} & GPU / mmap & $0.5/4$ & $38.9$ & $43.9$ & $47.6$ & $6.5$ & $71.1$ & $215.5$ [$173.7$] & $13.70\times$ / $14.67\times$ & $2,301\text{ MB}$ & $0.965228 \pm 0.0117$ & $+0.001 \pm 0.017\text{ cm}^3$ \\
 \textbf{\texttt{trt\_fp16\_cuda}} & \textbf{CUDA / mmap} & $\mathbf{0.5/4}$ & $\mathbf{29.2}$ & $\mathbf{1.3}$ & $\mathbf{49.0}$ & $\mathbf{6.1}$ & $\mathbf{2.6}$ & $\mathbf{96.3}$ [$\mathbf{58.9}$] & $\mathbf{30.67\times}$ / $\mathbf{33.14\times}$ & $\mathbf{455\textbf{ MB}}$ & $\mathbf{0.965229 \pm 0.0117}$ & $\mathbf{+0.001 \pm 0.019\textbf{ cm}^3}$ \\
 \textbf{\texttt{trt\_fp16\_optimized}} & \textbf{CUDA / mmap} & $\mathbf{0.25/8}$ & $\mathbf{29.1}$ & $\mathbf{1.3}$ & $\mathbf{24.8}$ & $\mathbf{4.5}$ & $\mathbf{2.8}$ & $\mathbf{68.9}$ [$\mathbf{50.5}$] & $\mathbf{42.86\times}$ / $\mathbf{44.87\times}$ & $\mathbf{522\textbf{ MB}}$ & $\mathbf{0.964778 \pm 0.0135}$ & $+0.120 \pm 1.182\text{ cm}^3$ \\
-\texttt{trt\_fp16\_nn} & GPU / mmap & $0.25/8$ & $38.1$ & $41.7$ & $20.8$ & $4.1$ & $69.3$ & $178.4$ [$141.3$] & $16.55\times$ / $18.12\times$ & $2149\text{ MB}$ & $0.960230 \pm 0.0139$ & $+0.481 \pm 1.073\text{ cm}^3$ \\
+\texttt{trt\_fp16\_nn} & GPU / mmap & $0.25/8$ & $38.1$ & $41.7$ & $20.8$ & $4.1$ & $69.3$ & $178.4$ [$141.3$] & $16.55\times$ / $16.89\times$ & $2,149\text{ MB}$ & $0.960230 \pm 0.0139$ & $+0.481 \pm 1.073\text{ cm}^3$ \\
 \bottomrule
 \end{tabular}%
 }
@@ -364,22 +416,25 @@ Tables~\ref{tab:master}--\ref{tab:scaling53} and Figures~\ref{fig:stage_ablation
 
 \begin{table}[t]
 \centering
-\caption{Controlled one-factor-at-a-time ablation study on Cohort 1 ($N = 9$ scans), isolating the latency and accuracy impact of each systems change.}
+\caption{Controlled 9-rung one-factor-at-a-time ablation ladder (\texttt{results/ablation.json}) plus custom CUDA operating points (\texttt{results/bench\_*.json}) on Cohort 1 ($N = 9$ scans).}
 \label{tab:ablation}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Ablation Step (Single Factor Changed)} & \textbf{E2E Med (ms)} & \textbf{Max (ms)} & \textbf{Speedup} & \textbf{Net (ms)} & \textbf{Mean Dice} \\
+\textbf{Configuration (Single Factor Changed)} & \textbf{E2E Med} & \textbf{Max} & \textbf{Speedup} & \textbf{Net} & \textbf{Mean Dice} \\
 \midrule
 1. Host path, PyTorch TF32 (\texttt{gzip + CPU}) & $2992.5$ & $6339.3$ & $1.00\times$ & $239.3$ & $0.965228$ \\
-2. $+$ TensorRT FP16 on host path & $2923.0$ & $6015.0$ & $1.02\times$ & $170.3$ & $0.965226$ \\
-3. $+$ MONAI GPU transforms (\texttt{gzip} read) & $706.9$ & $1404.3$ & $4.23\times$ & $201.1$ & $0.965228$ \\
-4. $+$ TensorRT FP16 with GPU transforms & $564.3$ & $1252.9$ & $5.30\times$ & $47.2$ & $0.965228$ \\
-5. $+$ Memory-mapped \texttt{.nii} read (TF32) & $363.3$ & $686.1$ & $8.24\times$ & $195.9$ & $0.965228$ \\
-6. $+$ TensorRT FP16 with \texttt{mmap} + MONAI GPU & $274.8$ & $472.5$ & $10.89\times$ & $54.0$ & $0.965228$ \\
-7. $+$ Custom CUDA kernels (\texttt{trt\_fp16\_cuda}) & $\mathbf{96.3}$ & $\mathbf{232.6}$ & $\mathbf{31.07\times}$ & $\mathbf{49.0}$ & $\mathbf{0.965229}$ \\
-8. $+$ Fast windows ($\text{ov}=0.25, B=8$, \texttt{optimized}) & $\mathbf{68.9}$ & $\mathbf{122.6}$ & $\mathbf{43.43\times}$ & $\mathbf{24.8}$ & $\mathbf{0.964778}$ \\
-9. Nearest-neighbor label inverse (\texttt{trt\_fp16\_nn}) & $178.4$ & $398.5$ & $16.77\times$ & $20.8$ & $0.960230$ \\
+2. Host path, TensorRT FP16 only & $2923.0$ & $6015.0$ & $1.02\times$ & $170.3$ & $0.965226$ \\
+3. MONAI GPU transforms, \texttt{gzip} read, TF32 & $706.9$ & $1404.3$ & $4.23\times$ & $201.1$ & $0.965228$ \\
+4. MONAI GPU transforms, \texttt{gzip} read, TRT & $564.3$ & $1252.9$ & $5.30\times$ & $47.2$ & $0.965228$ \\
+5. MONAI GPU transforms, \texttt{.nii} read, TF32 & $363.3$ & $686.1$ & $8.24\times$ & $195.9$ & $0.965228$ \\
+6. MONAI GPU transforms, \texttt{.nii} read, TRT & $274.8$ & $472.5$ & $10.89\times$ & $54.0$ & $0.965228$ \\
+7. Fast windows ($\omega=0.25, B=8$), MONAI GPU, TF32 & $320.6$ & $540.4$ & $9.33\times$ & $111.9$ & $0.964771$ \\
+8. Fast windows ($\omega=0.25, B=8$), MONAI GPU, TRT & $218.5$ & $374.2$ & $13.70\times$ & $23.5$ & $0.964767$ \\
+9. Fast windows, MONAI GPU, nearest inverse & $219.0$ & $361.6$ & $13.66\times$ & $24.1$ & $0.960230$ \\
+\midrule
+\textbf{+ Custom CUDA Kernels L4L (\texttt{trt\_fp16\_cuda})} & $\mathbf{96.3}$ & $\mathbf{232.6}$ & $\mathbf{31.07\times}$ & $\mathbf{49.0}$ & $\mathbf{0.965229}$ \\
+\textbf{+ Custom CUDA Kernels Fast (\texttt{optimized})} & $\mathbf{68.9}$ & $\mathbf{122.6}$ & $\mathbf{43.43\times}$ & $\mathbf{24.8}$ & $\mathbf{0.964778}$ \\
 \bottomrule
 \end{tabular}%
 }
@@ -387,29 +442,49 @@ Tables~\ref{tab:master}--\ref{tab:scaling53} and Figures~\ref{fig:stage_ablation
 
 \begin{table*}[t]
 \centering
-\caption{Multi-cohort GPU execution scaling across all $\mathbf{53}$ \textbf{CT volumes} ($41$ MSD volumes on local NVMe $+ 12$ external \texttt{FLARE22} volumes streamed from Google Drive).}
+\caption{Multi-cohort GPU scaling across all $\mathbf{53}$ \textbf{abdominal 3D CT volumes} ($41$ MSD volumes on local NVMe $+ 12$ unseen external MICCAI \texttt{FLARE22} volumes streamed over virtualized cloud-drive storage).}
 \label{tab:scaling53}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccccccc}
 \toprule
-\textbf{Cohort Subset} & \textbf{Volumes ($N$)} & \textbf{Voxel Range ($512 \times 512 \times Z$)} & \textbf{Patch Windows} & \textbf{\texttt{ingest} Med} & \textbf{\texttt{preprocess} Med} & \textbf{\texttt{sw\_network} Med} & \textbf{\texttt{postprocess} Med} & \textbf{E2E Median [IQR] (ms)} & \textbf{E2E Min--Max (ms)} & \textbf{Peak VRAM Med / Max} \\
+\textbf{Cohort Subset \& Execution Profile} & \textbf{Vols ($N$)} & \textbf{Voxel Range ($512 \times 512 \times Z$)} & \textbf{Patch Windows} & \textbf{\texttt{ingest} Med} & \textbf{\texttt{preprocess} Med} & \textbf{\texttt{sw\_network} Med} & \textbf{\texttt{postprocess} Med} & \textbf{E2E Median [IQR] (ms)} & \textbf{E2E Min--Max (ms)} & \textbf{Peak VRAM Med / Max} \\
 \midrule
-\textbf{MSD All Patient Volumes (\texttt{optimized})} & $\mathbf{41}$ & $8.13\text{M}\text{--}44.04\text{M}$ ($Z \in [31, 168]$) & $16\text{--}75$ (med $48$) & $41.32\text{ ms}$ & $\mathbf{1.59\textbf{ ms}}$ & $33.83\text{ ms}$ & $\mathbf{3.28\textbf{ ms}}$ & $\mathbf{87.44}$ [$\mathbf{43.55}$] & $37.61\text{--}139.84$ & $450.6$ / $\mathbf{630.8\textbf{ MB}}$ \\
-\textbf{MSD Training Cohort (\texttt{optimized})} & $32$ & $10.49\text{M}\text{--}44.04\text{M}$ ($Z \in [40, 168]$) & $16\text{--}75$ (med $48$) & $41.70\text{ ms}$ & $1.50\text{ ms}$ & $33.84\text{ ms}$ & $3.34\text{ ms}$ & $87.77$ [$40.52$] & $48.82\text{--}131.82$ & $478.8$ / $630.8\text{ MB}$ \\
-\textbf{MSD Validation (\texttt{optimized}, 90-pass)} & $\mathbf{9}$ & $8.13\text{M}\text{--}35.39\text{M}$ ($Z \in [31, 135]$) & $18\text{--}64$ (med $32$) & $29.14\text{ ms}$ & $\mathbf{1.27\textbf{ ms}}$ & $\mathbf{24.77\textbf{ ms}}$ & $\mathbf{2.84\textbf{ ms}}$ & $\mathbf{68.88}$ [$\mathbf{50.48}$] & $33.92\text{--}122.59$ & $394.3$ / $\mathbf{522.1\textbf{ MB}}$ \\
-\textbf{External \texttt{FLARE22} (\texttt{trt\_fp16\_cuda})} & $\mathbf{12}$ & $22.02\text{M}\text{--}28.84\text{M}$ ($Z \in [84, 110]$) & $32\text{--}72$ (med $50$) & $175.4\text{ ms}$ (GDrive) & $\mathbf{2.75\textbf{ ms}}$ & $64.5\text{ ms}$ & $\mathbf{3.38\textbf{ ms}}$ & $\mathbf{252.6}$ [$\mathbf{27.2}$] & $221.5\text{--}276.2$ & $373.0$ / $\mathbf{414.0\textbf{ MB}}$ \\
-\textbf{External \texttt{FLARE22} (\texttt{optimized})} & $\mathbf{12}$ & $22.02\text{M}\text{--}28.84\text{M}$ ($Z \in [84, 110]$) & $18\text{--}32$ (med $32$) & $175.0\text{ ms}$ (GDrive) & $\mathbf{2.73\textbf{ ms}}$ & $36.1\text{ ms}$ & $\mathbf{3.37\textbf{ ms}}$ & $\mathbf{220.6}$ [$\mathbf{33.6}$] & $197.9\text{--}247.3$ & $373.0$ / $\mathbf{414.0\textbf{ MB}}$ \\
+\textbf{MSD Full Cohort (\texttt{trt\_fp16\_optimized})} & $\mathbf{41}$ & $8.13\text{M}\text{--}44.04\text{M}$ ($Z \in [31, 168]$) & $16\text{--}75$ (med $48$) & $41.32\text{ ms}$ & $\mathbf{1.59\textbf{ ms}}$ & $33.83\text{ ms}$ & $\mathbf{3.28\textbf{ ms}}$ & $\mathbf{87.44}$ [$\mathbf{43.55}$] & $37.61\text{--}139.84$ & $450.6$ / $\mathbf{630.8\textbf{ MB}}$ \\
+\textbf{MSD Training Split (\texttt{trt\_fp16\_optimized})} & $32$ & $10.49\text{M}\text{--}44.04\text{M}$ ($Z \in [40, 168]$) & $16\text{--}75$ (med $48$) & $41.70\text{ ms}$ & $1.50\text{ ms}$ & $33.84\text{ ms}$ & $3.34\text{ ms}$ & $87.77$ [$40.52$] & $48.82\text{--}131.82$ & $478.8$ / $630.8\text{ MB}$ \\
+\textbf{MSD Validation Split (\texttt{optimized}, 90-pass)} & $\mathbf{9}$ & $8.13\text{M}\text{--}35.39\text{M}$ ($Z \in [31, 135]$) & $18\text{--}64$ (med $32$) & $29.14\text{ ms}$ & $\mathbf{1.27\textbf{ ms}}$ & $\mathbf{24.77\textbf{ ms}}$ & $\mathbf{2.84\textbf{ ms}}$ & $\mathbf{68.88}$ [$\mathbf{50.48}$] & $33.92\text{--}122.59$ & $394.3$ / $\mathbf{522.1\textbf{ MB}}$ \\
+\textbf{External \texttt{FLARE22} (\texttt{trt\_fp16\_cuda})} & $\mathbf{12}$ & $22.02\text{M}\text{--}28.84\text{M}$ ($Z \in [84, 110]$) & $32\text{--}72$ (med $50$) & $175.4\text{ ms}$ (Cloud) & $\mathbf{2.75\textbf{ ms}}$ & $64.5\text{ ms}$ & $\mathbf{3.38\textbf{ ms}}$ & $\mathbf{252.6}$ [$\mathbf{27.2}$] & $221.5\text{--}276.2$ & $373.0$ / $\mathbf{414.0\textbf{ MB}}$ \\
+\textbf{External \texttt{FLARE22} (\texttt{trt\_fp16\_optimized})} & $\mathbf{12}$ & $22.02\text{M}\text{--}28.84\text{M}$ ($Z \in [84, 110]$) & $18\text{--}32$ (med $32$) & $175.0\text{ ms}$ (Cloud) & $\mathbf{2.73\textbf{ ms}}$ & $36.1\text{ ms}$ & $\mathbf{3.37\textbf{ ms}}$ & $\mathbf{220.6}$ [$\mathbf{33.6}$] & $197.9\text{--}247.3$ & $373.0$ / $\mathbf{414.0\textbf{ MB}}$ \\
 \bottomrule
 \end{tabular}%
 }
 \end{table*}
 
-\subsection{Numerical Agreement, External Validation, and Formal TOST Equivalence}
-Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and \ref{fig:tradeoff} report patient-level segmentation quality and numerical equivalence across all $N = 21$ patients ($9$ internal MSD $+ 12$ external \texttt{FLARE22}):
+\subsection{Ten-Metric Geometric Validation, External Generalization, and TOST Equivalence}
+Tables~\ref{tab:metrics10}--\ref{tab:tost} and Figures~\ref{fig:mem_pareto} and \ref{fig:tradeoff_ba} detail segmentation accuracy and cross-backend numerical equivalence across all $N = 21$ validation patients:
 \begin{itemize}
-    \item \textbf{Formal TOST Equivalence Across Cohorts:} Unfolded TensorRT FP16 (\texttt{trt\_fp16\_unfolded}) fails equivalence on every cohort ($+1.6754\text{ cm}^3$ on MSD, $+1.5366\text{ cm}^3$ on \texttt{FLARE22}, $+1.5961\text{ cm}^3$ pooled; $p_{\text{TOST}} \ge 0.9997$, flipping $586.9$ voxels / $0.644\%$ per spleen on MSD). Analytical FP64 folding (\texttt{trt\_fp16\_cuda}) satisfies formal TOST equivalence at $\alpha = 0.05$ within the strict $\Delta_V = \pm 0.10\text{ cm}^3$ margin across MSD ($+0.0010 \pm 0.0194\text{ cm}^3$, $90\%$ CI $[-0.0110, +0.0130]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), external \texttt{FLARE22} ($-0.0110 \pm 0.0315\text{ cm}^3$, $90\%$ CI $[-0.0274, +0.0053]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), and pooled $N = 21$ cohorts ($-0.0059 \pm 0.0271\text{ cm}^3$, $90\%$ CI $[-0.0161, +0.0043]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$). Only $8.8$ boundary voxels per scan ($0.0093\%$ of organ voxels) flip label on MSD and $22.6$ voxels ($0.0208\%$) on \texttt{FLARE22}.
-    \item \textbf{External Multi-Center Generalization:} On the 12 unseen \texttt{FLARE22} scans, the frozen model achieves $0.9360 \pm 0.0493$ Mean Dice ($0.9555\text{--}0.9665$ on 9 typical scans; $0.8286\text{--}0.9043$ on 3 severe splenomegaly/boundary cases with $V_{\text{GT}}$ up to $481.7\text{ cm}^3$), confirming that cross-backend FP16 equivalence holds even when the model encounters out-of-distribution multi-center pathology.
+    \item \textbf{Ten-Metric Overlap, Surface, and Volumetric Fidelity (Table~\ref{tab:metrics10}):} Across all 10 evaluation metrics in \texttt{results/eval\_*.csv}, \texttt{trt\_fp16\_cuda} matches strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}) to four-to-six significant digits: Mean Dice $0.965229$ vs.\ $0.965233$, IoU $0.933011$ vs.\ $0.933019$, Sensitivity $0.956189$ vs.\ $0.956191$, Precision $0.974553$ vs.\ $0.974558$, Specificity $0.999853$ vs.\ $0.999853$, Volumetric Similarity $0.990461$ vs.\ $0.990460$, $\text{HD}_{95} = 2.18\text{ mm}$ vs.\ $2.18\text{ mm}$, and $\text{ASSD} = 0.3894\text{ mm}$ vs.\ $0.3892\text{ mm}$. Across all $9$ internal MSD validation cases, Dice shows no significant correlation with slice thickness (Spearman $\rho = -0.13, p = 0.74$) or ground-truth volume ($\rho = +0.23, p = 0.55$); the coarsest scan (\texttt{spleen\_8}, $7.5\text{ mm}$) ranks first in Dice ($0.9734$).
+    \item \textbf{Formal Paired TOST Equivalence Across $N = 21$ Patients (Table~\ref{tab:tost}):} Unfolded TensorRT FP16 (\texttt{trt\_fp16\_unfolded}) fails equivalence on every cohort ($+1.6754\text{ cm}^3$ on MSD, $+1.5366\text{ cm}^3$ on \texttt{FLARE22}, $+1.5961\text{ cm}^3$ pooled; $p_{\text{TOST}} \ge 0.9997$, flipping $586.9$ voxels or $0.644\%$ per spleen on MSD). Analytical FP64 weight folding (\texttt{trt\_fp16\_cuda}) satisfies paired TOST equivalence at $\alpha = 0.05$ within the strict $\Delta_V = \pm 0.10\text{ cm}^3$ bound on internal MSD ($+0.0010 \pm 0.0194\text{ cm}^3$, $90\%$ CI $[-0.0110, +0.0130]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), external \texttt{FLARE22} ($-0.0110 \pm 0.0315\text{ cm}^3$, $90\%$ CI $[-0.0274, +0.0053]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), and pooled $N = 21$ cohorts ($-0.0059 \pm 0.0271\text{ cm}^3$, $90\%$ CI $[-0.0161, +0.0043]\text{ cm}^3$, $p_{\text{TOST}} < 10^{-6}$), flipping an average of only $8.8$ boundary voxels ($0.0093\%$) on MSD and $22.6$ voxels ($0.0208\%$) on \texttt{FLARE22}.
+    \item \textbf{External Multi-Center Pathology Generalization (Table~\ref{tab:percase}):} On the 12 unseen \texttt{FLARE22} scans, the frozen model achieves $0.9360 \pm 0.0493$ Mean Dice ($0.9554\text{--}0.9665$ across 9 typical scans; $0.8286\text{--}0.9043$ on 3 severe splenomegaly or boundary-variant cases with $V_{\text{GT}}$ up to $481.7\text{ cm}^3$), confirming that FP64-folded FP16 numerical equivalence holds even on out-of-distribution multi-center anatomy.
 \end{itemize}
+
+\begin{table*}[t]
+\centering
+\caption{Ten-metric geometric overlap, boundary distance, and physical volumetry summary (\texttt{results/eval\_*.csv}, Mean $\pm$ SD across Cohort 1 MSD $N=9$, ground-truth spleen volume $V_{\text{GT}} = 286.73 \pm 130.35\text{ cm}^3$).}
+\label{tab:metrics10}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccccc}
+\toprule
+\textbf{Execution Profile} & \textbf{3D Dice} & \textbf{IoU (Jaccard)} & \textbf{Sensitivity} & \textbf{Precision} & \textbf{Specificity} & \textbf{Vol.\ Similarity} & \textbf{$\text{HD}_{95}$ (mm)} & \textbf{ASSD (mm)} & \textbf{$V_{\text{pred}}$ ($\text{cm}^3$)} & \textbf{MAE vs.\ GT / Bias vs.\ FP32} \\
+\midrule
+\texttt{pytorch\_fp32\_strict} (Ref) & $0.965233 \pm 0.0117$ & $0.933019 \pm 0.0215$ & $0.956191 \pm 0.0158$ & $0.974558 \pm 0.0119$ & $0.999853$ & $0.990460 \pm 0.0079$ & $2.18 \pm 0.99$ & $0.389 \pm 0.119$ & $281.56 \pm 128.29$ & $5.17\text{ cm}^3$ / $0.0000\text{ cm}^3$ \\
+\texttt{trt\_fp16\_unfolded} (Bug) & $0.965722 \pm 0.0120$ & $0.933942 \pm 0.0219$ & $0.959719 \pm 0.0155$ & $0.971909 \pm 0.0127$ & $0.999838$ & $0.992356 \pm 0.0064$ & $2.45 \pm 1.80$ & $0.391 \pm 0.121$ & $283.24 \pm 128.83$ & $4.24\text{ cm}^3$ / $\mathbf{+1.6754\textbf{ cm}^3}$ \\
+\textbf{\texttt{trt\_fp16\_cuda} (Folded L4L)} & $\mathbf{0.965229 \pm 0.0117}$ & $\mathbf{0.933011 \pm 0.0215}$ & $\mathbf{0.956189 \pm 0.0158}$ & $\mathbf{0.974553 \pm 0.0119}$ & $\mathbf{0.999853}$ & $\mathbf{0.990461 \pm 0.0080}$ & $\mathbf{2.18 \pm 0.99}$ & $\mathbf{0.389 \pm 0.119}$ & $\mathbf{281.56 \pm 128.29}$ & $5.17\text{ cm}^3$ / $\mathbf{+0.0010\textbf{ cm}^3}$ \\
+\textbf{\texttt{trt\_fp16\_optimized} (Fast)} & $\mathbf{0.964778 \pm 0.0135}$ & $\mathbf{0.932236 \pm 0.0246}$ & $\mathbf{0.955821 \pm 0.0166}$ & $\mathbf{0.973997 \pm 0.0136}$ & $\mathbf{0.999853}$ & $\mathbf{0.990435 \pm 0.0071}$ & $\mathbf{2.35 \pm 1.81}$ & $\mathbf{0.417 \pm 0.133}$ & $\mathbf{281.68 \pm 128.52}$ & $5.10\text{ cm}^3$ / $+0.1196\text{ cm}^3$ \\
+\texttt{trt\_fp16\_nn} (Nearest Inv) & $0.960230 \pm 0.0139$ & $0.923798 \pm 0.0250$ & $0.951877 \pm 0.0169$ & $0.968824 \pm 0.0140$ & $0.999822$ & $0.991007 \pm 0.0072$ & $2.44 \pm 1.80$ & $0.467 \pm 0.148$ & $282.04 \pm 128.54$ & $4.75\text{ cm}^3$ / $+0.4814\text{ cm}^3$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
 
 \begin{figure*}[t]
     \centering
@@ -417,9 +492,8 @@ Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and
     \includegraphics[width=0.45\textwidth]{figures/pareto_sweep.png}\\[3pt]
     \includegraphics[width=0.44\textwidth]{figures/failure_case_1.png}\hfill
     \includegraphics[width=0.44\textwidth]{figures/failure_case_2.png}
-    \caption{\textbf{Top Left:} Peak GPU memory footprint ($2,301\text{ MB}$ MONAI \texttt{float64} meshgrid vs.\ $455\text{ MB}$ custom register-affine CUDA). \textbf{Top Right:} 9-configuration sliding-window Pareto frontier across overlap $(0.50, 0.25, 0.125)$ and batch size $(1, 4, 8)$. \textbf{Bottom Left:} Failure Case 1 (\texttt{spleen\_56}, Dice $0.9361$, $7.0\text{ mm}$ slice thickness) showing $40.1\%$ of error voxels concentrated at the polar domes. \textbf{Bottom Right:} Failure Case 2 (\texttt{spleen\_62}, Dice $0.9611$) showing FP/FN volumetric cancellation ($-0.58\text{ cm}^3$ net error) along the splenic hilum.}
+    \caption{\textbf{Top Left:} Peak GPU VRAM allocation ($2,301\text{ MB}$ MONAI \texttt{float64} meshgrids vs.\ $455\text{ MB}$ MedTRT register-affine CUDA). \textbf{Top Right:} 12-configuration sliding-window Pareto sweep across overlap $\omega \in \{0.25, 0.50, 0.75\}$ and batch size $B \in \{1, 2, 4, 8\}$. \textbf{Bottom Left:} Boundary analysis of \texttt{spleen\_56} (Dice $0.9361$, $7.0\text{ mm}$ slices) showing $40\%$ of error voxels at polar domes. \textbf{Bottom Right:} Boundary analysis of \texttt{spleen\_62} (Dice $0.9611$) showing FP/FN volumetric cancellation ($-0.58\text{ cm}^3$ net error) at the splenic hilum.}
     \label{fig:mem_pareto}
-    \label{fig:fail_cases}
 \end{figure*}
 
 \begin{figure*}[t]
@@ -428,19 +502,18 @@ Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and
     \includegraphics[width=0.31\textwidth]{figures/bland_altman.png}\hfill
     \includegraphics[width=0.31\textwidth]{figures/segmentation_metrics_distribution.png}\hfill
     \includegraphics[width=0.31\textwidth]{figures/volumetric_scatter_and_error.png}
-    \caption{\textbf{Top (A--B):} Segmentation accuracy (Mean 3D Dice) vs.\ end-to-end latency across execution profiles and paired volumetric bias vs.\ strict IEEE FP32 ($\text{cm}^3$, Mean $\pm 95\%$ CI) against the $\pm 0.10\text{ cm}^3$ and $\pm 0.50\text{ cm}^3$ TOST equivalence regions. \textbf{Bottom:} Dual Bland--Altman volumetric agreement against strict IEEE FP32 (left), segmentation metric distributions across MSD and external \texttt{FLARE22} cohorts (center), and volumetric parity scatter (right).}
-    \label{fig:tradeoff}
-    \label{fig:ba_metrics}
+    \caption{\textbf{Top (A--B):} Mean 3D Dice vs.\ end-to-end latency across execution profiles and paired volumetric bias vs.\ strict IEEE FP32 ($\text{cm}^3$, Mean $\pm 95\%$ CI) against the $\pm 0.10\text{ cm}^3$ and $\pm 0.50\text{ cm}^3$ TOST equivalence regions. \textbf{Bottom:} Dual Bland--Altman volumetric agreement against strict IEEE FP32 (left), multi-metric overlap/surface distributions (center), and physical volume parity scatter (right).}
+    \label{fig:tradeoff_ba}
 \end{figure*}
 
 \begin{table*}[t]
 \centering
-\caption{Per-patient paired performance and numerical agreement across all $N = 9$ internal MSD validation scans and $N = 12$ external unseen MICCAI \texttt{FLARE22} scans (stored on Google Drive). $\Delta V_{\text{unf}}$ and $\Delta V_{\text{cuda}}$ denote volume bias ($\text{cm}^3$) vs.\ strict IEEE FP32.}
+\caption{Per-patient paired latency and numerical equivalence across all $N = 9$ internal MSD validation scans and $N = 12$ external unseen MICCAI \texttt{FLARE22} scans. $\Delta V_{\text{unf}}$ and $\Delta V_{\text{cuda}}$ denote physical volume bias ($\text{cm}^3$) relative to strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}).}
 \label{tab:percase}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccccccccc}
 \toprule
-\textbf{Cohort / Case ID} & \textbf{Shape ($X \times Y \times Z$)} & \textbf{Win ($0.5/0.25$)} & \textbf{Host FP32 (ms)} & \textbf{CUDA L4L (ms)} & \textbf{Fast Opt (ms)} & \textbf{Paired Speedup (L4L / Opt)} & \textbf{Dice (FP32 Ref)} & \textbf{Dice (CUDA L4L)} & \textbf{$\Delta\text{Dice}$ (L4L)} & \textbf{HD95 / ASSD (mm)} & \textbf{$V_{\text{GT}}$ ($\text{cm}^3$)} & \textbf{$\Delta V_{\text{unf}}$ / $\Delta V_{\text{cuda}}$ ($\text{cm}^3$)} & \textbf{Flipped Voxels (\% Organ)} \\
+\textbf{Cohort / Case ID} & \textbf{Shape ($X \times Y \times Z$)} & \textbf{Win ($0.5/0.25$)} & \textbf{Host FP32 (ms)} & \textbf{CUDA L4L (ms)} & \textbf{Fast Opt (ms)} & \textbf{Paired Speedup (L4L / Opt)} & \textbf{Dice (FP32 Ref)} & \textbf{Dice (CUDA L4L)} & \textbf{$\Delta\text{Dice}$ (L4L)} & \textbf{$\text{HD}_{95}$ / ASSD (mm)} & \textbf{$V_{\text{GT}}$ ($\text{cm}^3$)} & \textbf{$\Delta V_{\text{unf}}$ / $\Delta V_{\text{cuda}}$ ($\text{cm}^3$)} & \textbf{Flipped Voxels (\% Organ)} \\
 \midrule
 \multicolumn{14}{l}{\textit{\textbf{Cohort 1: Internal Held-Out MSD \texttt{Task09\_Spleen} Validation Split ($N = 9$ independent patients, 10 timed passes/patient)}}}\\
 \texttt{spleen\_56} & $512 \times 512 \times 33$ & $32 / 18$ & $1543.7$ & $47.6$ & $36.0$ & $32.46\times / 42.91\times$ & $0.936143$ & $0.936164$ & $+0.000021$ & $4.25 / 0.55$ & $78.07$ & $+0.722 / -0.003$ & $3 / 22,038$ ($0.0136\%$) \\
@@ -452,9 +525,9 @@ Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and
 \texttt{spleen\_63} & $512 \times 512 \times 60$ & $75 / 32$ & $2952.0$ & $98.4$ & $63.3$ & $30.01\times / 46.64\times$ & $0.963625$ & $0.963618$ & $-0.000007$ & $2.71 / 0.45$ & $356.60$ & $+1.920 / +0.011$ & $12 / 121,013$ ($0.0099\%$) \\
 \texttt{spleen\_8} & $512 \times 512 \times 31$ & $50 / 32$ & $1625.1$ & $62.1$ & $47.9$ & $26.19\times / 33.92\times$ & $0.973413$ & $0.973384$ & $-0.000029$ & $1.57 / 0.24$ & $501.55$ & $+2.488 / -0.037$ & $10 / 106,587$ ($0.0094\%$) \\
 \texttt{spleen\_9} & $512 \times 512 \times 41$ & $50 / 32$ & $1949.7$ & $66.7$ & $52.5$ & $29.24\times / 37.13\times$ & $0.970787$ & $0.970786$ & $-0.000001$ & $1.49 / 0.30$ & $269.15$ & $+1.456 / -0.011$ & $6 / 95,683$ ($0.0063\%$) \\
-\textbf{MSD Mean $\pm$ SD} & --- & $73.9 / 41.0$ & $3393.8 \pm 1699$ & $100.3 \pm 40.3$ & $72.9 \pm 26.5$ & $\mathbf{33.14\times} / \mathbf{44.87\times}$ & $0.965233$ & $\mathbf{0.965229}$ & $-0.000004$ & $\mathbf{2.18 / 0.39}$ & $286.73$ & $\mathbf{+1.675 / +0.001}$ & $\mathbf{8.8}$ ($\mathbf{0.0093\%}$) \\
+\textbf{MSD Mean $\pm$ SD} & \textit{9 Patients} & $73.9 / 41.0$ & $3393.8 \pm 1699$ & $100.3 \pm 40.3$ & $72.9 \pm 26.5$ & $\mathbf{33.14\times} / \mathbf{44.87\times}$ & $0.965233$ & $\mathbf{0.965229}$ & $-0.000004$ & $\mathbf{2.18 / 0.39}$ & $286.73$ & $\mathbf{+1.675 / +0.001}$ & $\mathbf{8.8}$ ($\mathbf{0.0093\%}$) \\
 \midrule
-\multicolumn{14}{l}{\textit{\textbf{Cohort 2: External Unseen Multi-Center MICCAI \texttt{FLARE22} Test Cohort on Google Drive ($N = 12$ independent patients)}}}\\
+\multicolumn{14}{l}{\textit{\textbf{Cohort 2: External Unseen Multi-Center MICCAI \texttt{FLARE22} Cohort ($N = 12$ independent patients)}}}\\
 \texttt{FLARE22\_Tr\_0001} & $512 \times 512 \times 110$ & $32 / 18$ & $6367.5$ & $257.9$ & $243.3$ & $24.69\times / 26.18\times$ & $0.961213$ & $0.961207$ & $-0.000006$ & $2.32 / 0.56$ & $186.17$ & $+0.987 / -0.002$ & $16 / 175,548$ ($0.0091\%$) \\
 \texttt{FLARE22\_Tr\_0002} & $512 \times 512 \times 107$ & $50 / 32$ & $5912.2$ & $276.2$ & $241.3$ & $21.40\times / 24.50\times$ & $0.964399$ & $0.964395$ & $-0.000004$ & $2.50 / 0.56$ & $281.25$ & $+1.436 / -0.010$ & $17 / 198,142$ ($0.0086\%$) \\
 \texttt{FLARE22\_Tr\_0003} & $512 \times 512 \times 101$ & $50 / 32$ & $5327.0$ & $253.6$ & $236.9$ & $21.01\times / 22.49\times$ & $0.955464$ & $0.955433$ & $-0.000031$ & $2.17 / 0.66$ & $163.03$ & $+0.795 / +0.007$ & $13 / 107,077$ ($0.0121\%$) \\
@@ -467,7 +540,7 @@ Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and
 \texttt{FLARE22\_Tr\_0010} & $512 \times 512 \times 96$ & $50 / 32$ & $5168.0$ & $251.6$ & $197.9$ & $20.54\times / 26.11\times$ & $0.966501$ & $0.966511$ & $+0.000010$ & $1.83 / 0.58$ & $367.51$ & $+1.829 / +0.010$ & $8 / 209,759$ ($0.0038\%$) \\
 \texttt{FLARE22\_Tr\_0011} & $512 \times 512 \times 84$ & $50 / 32$ & $4422.4$ & $229.0$ & $204.2$ & $19.31\times / 21.66\times$ & $0.962932$ & $0.962930$ & $-0.000002$ & $2.30 / 0.58$ & $292.36$ & $+1.561 / +0.007$ & $15 / 189,184$ ($0.0079\%$) \\
 \texttt{FLARE22\_Tr\_0012} & $512 \times 512 \times 103$ & $50 / 32$ & $5596.1$ & $265.1$ & $241.1$ & $21.11\times / 23.21\times$ & $0.904354$ & $0.904320$ & $-0.000034$ & $23.44 / 1.95$ & $130.75$ & $+1.099 / -0.002$ & $15 / 73,200$ ($0.0205\%$) \\
-\textbf{FLARE22 Mean $\pm$ SD} & --- & $50.3 / 30.8$ & $5398.0 \pm 601$ & $250.5 \pm 17.5$ & $222.3 \pm 19.0$ & $\mathbf{21.52\times} / \mathbf{24.29\times}$ & $0.936015$ & $\mathbf{0.935974}$ & $-0.000041$ & $\mathbf{6.25 / 1.01}$ & $240.06$ & $\mathbf{+1.537 / -0.011}$ & $\mathbf{22.6}$ ($\mathbf{0.0208\%}$) \\
+\textbf{FLARE22 Mean $\pm$ SD} & \textit{12 Patients} & $50.3 / 30.8$ & $5398.0 \pm 601$ & $250.5 \pm 17.5$ & $222.3 \pm 19.0$ & $\mathbf{21.52\times} / \mathbf{24.29\times}$ & $0.936015$ & $\mathbf{0.935974}$ & $-0.000041$ & $\mathbf{6.25 / 1.01}$ & $240.06$ & $\mathbf{+1.537 / -0.011}$ & $\mathbf{22.6}$ ($\mathbf{0.0208\%}$) \\
 \bottomrule
 \end{tabular}%
 }
@@ -475,7 +548,7 @@ Tables~\ref{tab:percase} and \ref{tab:tost} and Figures~\ref{fig:ba_metrics} and
 
 \begin{table*}[t]
 \centering
-\caption{Formal paired Two One-Sided Tests (TOST) equivalence analysis against strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}) at $\alpha = 0.05$ across Internal MSD ($N=9$), External \texttt{FLARE22} ($N=12$), and Pooled ($N=21$) patient cohorts.}
+\caption{Formal paired Two One-Sided Tests (TOST) equivalence analysis against strict IEEE FP32 (\texttt{pytorch\_fp32\_strict}) at significance level $\alpha = 0.05$ across Internal MSD ($N=9$), External \texttt{FLARE22} ($N=12$), and Pooled ($N=21$) patient cohorts.}
 \label{tab:tost}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccc}
@@ -501,43 +574,40 @@ FLARE22 External ($N = 12$) & \textbf{\texttt{trt\_fp16\_cuda} (Folded) Dice} & 
 \section{Discussion and Broader Implications}
 \label{sec:discussion}
 
-\subsection{Accelerated Medical Imaging and Interactive Radiological Workstations}
-Reducing 3D volumetric segmentation latency from $3.0\text{--}6.1\text{ s}$ to $68.9\text{--}96.3\text{ ms}$ ($\sim 10\text{--}15\text{ volumes/s}$) shifts 3D organ segmentation from an asynchronous batch process to an interactive primitive suitable for radiological review workstations (\texttt{app/workstation.py}) and large-scale retrospective cohort analysis across thousands of abdominal CT studies.
+\subsection{Interactive 3D Segmentation Workstations and Cohort Screening}
+Compressing end-to-end 3D CT segmentation latency from $2.95\text{--}6.14\text{ s}$ to $68.9\text{--}96.3\text{ ms}$ ($10.4\text{--}14.5\text{ volumes/s}$) transforms volumetric organ segmentation from an offline batch job into an interactive operation suitable for research review workstations (\texttt{app/workstation.py}) and retrospective multi-thousand-scan imaging studies.
 
-\subsection{Future Potential for Image-Guided Procedures and Surgical Navigation}
-While this study is a computational benchmark on retrospective CT datasets and makes no clinical validation claims, sub-$100\text{ ms}$ volumetric segmentation with a $455\text{ MB}$ VRAM footprint establishes a systems foundation for future research in radiation therapy treatment planning, interventional radiology, and image-guided surgical navigation where updated 3D anatomical models must be recomputed rapidly alongside visualization buffers.
+\subsection{Numerical Conditioning as a Prerequisite for Reduced-Precision Medical AI}
+Our diagnosis of the $+1.68\text{ cm}^3$ (MSD) and $+1.54\text{ cm}^3$ (\texttt{FLARE22}) unfolded FP16 volume dilation demonstrates that aggregate overlap scores alone (Dice $0.9657$ vs.\ $0.9652$) fail to detect systematic directional bias in reduced-precision inference. In quantitative longitudinal studies measuring organ volume change across serial scans, a $+1.6\text{ cm}^3$ software bias introduced solely by switching from an FP32 PyTorch checkpoint to an unfused FP16 TensorRT engine would confound biological effect sizes. Pre-export algebraic conditioning in IEEE-754 \texttt{float64} removes this bias at zero runtime overhead.
 
-\subsection{Numerical Reliability in Quantitative Volumetry}
-Our discovery of the $+1.68\text{ cm}^3$ (MSD) and $+1.54\text{ cm}^3$ (\texttt{FLARE22}) unfolded FP16 dilation demonstrates that high Dice similarity ($0.9657$ vs.\ $0.9652$) can mask systematic volumetric bias when reduced-precision engines are deployed without cross-backend equivalence testing. In longitudinal disease monitoring (e.g., tracking splenic volume regression or progression across follow-up CT scans), a $+1.6\text{ cm}^3$ software-induced offset between an FP32 training server and an FP16 deployment workstation could confound subtle biological change. Analytical pre-export weight folding in \texttt{float64} eliminates this artifact at zero runtime cost.
+\subsection{Register-Level Spatial Computing and High-Density GPU Co-Residency}
+Replacing MONAI's $2,301\text{ MB}$ \texttt{float64} coordinate meshgrids with scalar register-computed $3 \times 4$ affine transformations ($455\text{ MB}$ peak VRAM) enables five concurrent 3D segmentation pipelines to co-reside inside the memory budget previously occupied by a single transform call. More generally, MedTRT illustrates three transferable HPC design principles: (1) Amdahl-guided full-pipeline profiling before kernel specialization, (2) substituting $O(1)$ per-thread scalar register arithmetic for $O(D \cdot H \cdot W \cdot 3)$ global memory traffic, and (3) exact pre-compilation conditioning of ill-scaled normalization layers.
 
-\subsection{Resource-Constrained Computing and General HPC Principles}
-By replacing MONAI's $2,301\text{ MB}$ \texttt{float64} coordinate meshgrids with register-computed $3 \times 4$ affine transformations ($455\text{ MB}$ peak VRAM), up to five distinct 3D organ segmentation pipelines can co-reside in the memory footprint previously consumed by a single transform call. More broadly, this work illustrates three general HPC principles: (1) profiling-driven optimization governed by Amdahl's Law, (2) trading redundant global memory traffic ($O(D \cdot H \cdot W \cdot 3)$ meshgrids) for scalar register arithmetic, and (3) algebraic conditioning of computational graphs prior to low-precision compilation.
-
-\section{Limitations}
+\section{Limitations and Scope Boundaries}
 \label{sec:limitations}
 
-To maintain strict scientific transparency, we highlight nine scope boundaries of this study:
+To uphold strict scientific transparency, we document nine scope boundaries:
 \begin{enumerate}
-    \item \textbf{Internal Checkpoint-Selection Split ($N=9$) \& External Sample Size ($N=12$):} The 9 internal MSD validation scans were never used for gradient updates, but the upstream MONAI bundle selected \texttt{model.pt} using validation Dice on those 9 scans because official MSD \texttt{imagesTs} test labels are not public. While our 12 unseen external multi-center \texttt{FLARE22} scans ($N=21$ pooled patients, $53$ total CT volumes) provide an independent external test cohort, larger multi-center clinical cohorts ($N > 100$) are needed for epidemiological generalization.
-    \item \textbf{Single-Organ \& Single-Model Scope:} Experiments evaluate a single pretrained 3D Residual U-Net segmenting a single organ (spleen). Multi-organ models ($13\text{--}104$ classes) increase the channel dimension of postprocessing.
-    \item \textbf{Single Imaging Modality:} Only abdominal CT volumes with HU intensity windowing were evaluated; multi-sequence 3D MRI and PET/CT require different intensity normalization kernels.
-    \item \textbf{Single Hardware Platform under Windows WDDM:} All measurements were collected on one NVIDIA GeForce RTX 5080 Laptop GPU (\texttt{sm\_120}, $90\text{ W}$ TGP) under Windows 11 WDDM scheduling. Absolute latencies will differ on Linux datacenter GPUs (e.g., H100/B200 in TCC mode) or embedded Jetson modules.
-    \item \textbf{Warm Page-Cache vs.\ Cold Disk \& Gzip Decompression:} Primary GPU benchmarks measure pre-decompressed \texttt{.nii} files in warm OS page cache ($29.2\text{ ms}$ ingest; $23.8\text{ ms}$ cold unbuffered local NVMe read vs.\ $175.4\text{ ms}$ over Google Drive). One-time \texttt{.nii.gz} decompression ($265.0\text{ ms}$ standalone; $385\text{--}425\text{ ms}$ in-pipeline) is outside the steady-state \texttt{mmap} path.
-    \item \textbf{Warm Process Steady State:} Benchmarks exclude one-time process startup, CUDA context initialization, NVRTC compilation, and TensorRT engine deserialization.
-    \item \textbf{Absence of DICOM Network Transport:} The pipeline ingests NIfTI volumes from local/mounted storage and does not benchmark hospital DICOM association, series assembly, or HL7/FHIR reporting.
-    \item \textbf{Single-Stream Non-Concurrent Execution:} Benchmarks measure single-stream per-volume latency rather than multi-client concurrent serving.
-    \item \textbf{Research Prototype Status:} MedTRT is a scientific performance-engineering study and is not a cleared medical device.
+    \item \textbf{Internal Checkpoint Split ($N=9$) \& External Sample Size ($N=12$):} The 9 internal MSD validation scans had zero overlap with gradient training, but upstream MONAI checkpoint selection evaluated validation Dice on those 9 scans because official MSD \texttt{imagesTs} labels are unannotated. Our 12 external multi-center \texttt{FLARE22} scans ($N=21$ pooled patients, $53$ total CT volumes) provide an independent unseen cohort, though broader clinical characterization requires $N > 100$ multi-institutional studies.
+    \item \textbf{Single-Organ Binary Architecture:} Experiments evaluate a binary 3D Residual U-Net segmenting the spleen; multi-organ architectures ($13\text{--}104$ classes) require multi-channel top-$K$ postprocessing.
+    \item \textbf{Single Modality:} Benchmarks evaluate abdominal CT with fixed HU windowing rather than multi-sequence MRI or PET/CT.
+    \item \textbf{Single Laptop GPU under Windows WDDM:} Timings reflect an NVIDIA RTX 5080 Laptop GPU (\texttt{sm\_120}, $90\text{ W}$ TGP) under Windows 11 WDDM scheduling; absolute latencies differ on Linux TCC datacenter GPUs or embedded Jetson modules.
+    \item \textbf{Warm Page-Cache vs.\ Cold Storage \& Decompression:} Primary GPU benchmarks measure pre-decompressed \texttt{.nii} files in warm OS page cache ($29.2\text{ ms}$ ingest; $23.8\text{ ms}$ cold unbuffered NVMe read vs.\ $175.4\text{ ms}$ over virtualized cloud storage), excluding one-time \texttt{.nii.gz} decompression ($265.0\text{ ms}$ standalone).
+    \item \textbf{Steady-State Process Timing:} Benchmarks exclude one-time Python startup, CUDA initialization, NVRTC compilation, and TensorRT engine deserialization.
+    \item \textbf{Local File Ingestion:} Hospital DICOM network association and series assembly are outside repository scope.
+    \item \textbf{Single-Stream Execution:} Latency reflects sequential single-volume execution rather than multi-client batching.
+    \item \textbf{Non-Clinical Research Prototype:} MedTRT is an educational and research engineering study and is not a cleared medical device.
 \end{enumerate}
 
 \section{Future Research Directions}
 \label{sec:future}
 
-Future work will extend MedTRT along eight technical directions: (A) \textbf{Multi-Organ Segmentation:} generalizing \texttt{fused\_invert\_trilinear\_threshold\_u8} to top-$K$ sparse multi-class trilinear interpolation for 13-organ \texttt{FLARE} and 104-class \texttt{TotalSegmentator} models; (B) \textbf{Multi-Modality Support:} adding register-fused bias-field and $z$-score kernels for 3D MRI and PET/CT; (C) \textbf{INT8 and Blackwell FP8 Quantization:} combining analytical BatchNorm folding with calibrated \texttt{INT8} and native \texttt{FP8} (\texttt{E4M3}) Tensor Core execution; (D) \textbf{CUDA Graphs \& Persistent Kernels:} capturing the entire sliding-window patch loop inside a single \texttt{cudaGraphExec\_t}; (E) \textbf{TensorRT Custom Plugins (\texttt{IPluginV3}):} embedding the register-affine preprocessing and postprocessing kernels directly inside the serialized TensorRT engine graph; (F) \textbf{Multi-Stream Asynchronous Double-Buffering:} overlapping PCIe DMA ingestion of volume $i+1$ with GPU inference of volume $i$; (G) \textbf{Edge Healthcare Deployment:} benchmarking power-constrained inference on NVIDIA Jetson Orin and Jetson Thor modules; and (H) \textbf{Hospital Archive Streaming:} integrating asynchronous DICOM series assembly directly into pinned host staging buffers.
+Future extensions target eight directions: (A) \textbf{Multi-Organ Sparse Interpolation:} generalizing \texttt{fused\_invert\_trilinear\_threshold\_u8} to top-$K$ probability channels for 13-organ \texttt{FLARE} and 104-structure \texttt{TotalSegmentator} models; (B) \textbf{Multi-Modality Kernels:} register-fused $z$-score normalization for 3D MRI and PET/CT; (C) \textbf{Blackwell FP8 \& Calibrated INT8:} pairing analytical BatchNorm folding with native \texttt{FP8} (\texttt{E4M3}) Tensor Core execution; (D) \textbf{CUDA Graph Capture:} encapsulating all sliding-window launches inside a single \texttt{cudaGraphExec\_t}; (E) \textbf{TensorRT \texttt{IPluginV3} Integration:} embedding register-affine CUDA kernels directly inside serialized \texttt{.engine} plans; (F) \textbf{Dual-Stream DMA Overlapping:} pipelining PCIe \texttt{h2d} transfer of volume $i+1$ with inference on volume $i$; (G) \textbf{Embedded Edge Profiling:} benchmarking power-constrained throughput on NVIDIA Jetson Orin/Thor modules; and (H) \textbf{Asynchronous Pinned DICOM Assembly:} streaming raw DICOM slices directly into pinned host staging buffers.
 
 \section{Conclusion}
 \label{sec:conclusions}
 
-We have demonstrated that order-of-magnitude end-to-end acceleration of 3D volumetric CT organ segmentation requires co-designing the entire computational pipeline around the neural network. By replacing host \texttt{.nii.gz} decompression and MONAI's $2,301\text{ MB}$ \texttt{float64} GPU coordinate meshgrids with memory-mapped ingestion and nine custom register-affine CUDA C++17 kernels, MedTRT achieves a $\mathbf{30.67\times}$ cohort median speedup ($\mathbf{33.14\times}$ paired patient-level mean speedup at $96.3\text{ ms}$) under controlled matched sliding-window settings and a $\mathbf{42.86\times}$ speedup ($\mathbf{46.64\times}$ paired median at $68.9\text{ ms}$) under fast sliding-window settings, while reducing peak GPU memory by $\mathbf{5.06\times}$ ($455\text{ MB}$). Simultaneously, our analytical \texttt{float64} \texttt{ConvTranspose3d+BatchNorm3d} weight folding resolves the $-81.79$ decoder FP16 cancellation bug, reducing logit drift by $\mathbf{35.6\times}$ and achieving formal paired TOST equivalence ($p_{\text{TOST}} < 10^{-6}$) within $\pm 0.10\text{ cm}^3$ across $N = 21$ internal MSD and external unseen MICCAI \texttt{FLARE22} patients.
+Order-of-magnitude end-to-end acceleration of volumetric 3D CT organ segmentation requires co-designing storage ingestion, register-level GPU spatial kernels, and numerical graph conditioning around the neural network. By replacing host \texttt{.nii.gz} decompression and MONAI's $2,301\text{ MB}$ \texttt{float64} GPU coordinate meshgrids with memory-mapped ingestion and nine custom register-affine CUDA C++17 kernels, MedTRT achieves a $\mathbf{30.67\times}$ cohort median speedup ($\mathbf{33.14\times}$ paired patient-level mean speedup at $\mathbf{96.3\textbf{ ms}}$) under controlled matched sliding windows and a $\mathbf{42.86\times}$ cohort speedup ($\mathbf{46.64\times}$ paired median at $\mathbf{68.9\textbf{ ms}}$) under fast sliding windows, while cutting peak GPU memory by $\mathbf{5.06\times}$ ($\mathbf{455\textbf{ MB}}$). Simultaneously, analytical \texttt{float64} \texttt{ConvTranspose3d+BatchNorm3d} folding resolves the $-81.79$ decoder FP16 cancellation bug, reducing logit drift by $\mathbf{35.6\times}$ and satisfying formal paired TOST equivalence ($p_{\text{TOST}} < 10^{-6}$) within $\pm 0.10\text{ cm}^3$ across $N = 21$ internal MSD and unseen external MICCAI \texttt{FLARE22} patients.
 
 \begin{thebibliography}{99}
 \footnotesize

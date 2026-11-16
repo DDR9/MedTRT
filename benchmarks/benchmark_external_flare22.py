@@ -5,7 +5,7 @@ External Multi-Center Validation (MICCAI FLARE22 on Google Drive) & Statistical 
 Addresses all peer-review methodology requirements without touching the 8 frozen measurement
 modules (`MEASUREMENT_MODULES`):
 1. Independent External Cohort Validation (`N = 12` unseen multi-center abdominal CT scans from
-   MICCAI FLARE22 stored on Google Drive `$MEDTRT_FLARE22_DIR`).
+   MICCAI FLARE22 configured via `MEDTRT_FLARE22_DIR` or `./data/FLARE22_External_Cohort`).
 2. Patient-Level Paired Statistical Analysis (separating 90 repeated benchmark passes from
    `N = 9` MSD internal validation patients and `N = 12` external FLARE22 patients, total `N = 21`
    evaluated patients; plus `N = 41` MSD + `N = 12` FLARE22 = `53` total benchmarked CT volumes).
@@ -643,9 +643,10 @@ def run_external_and_statistical_suite() -> Dict[str, Any]:
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
-    # Also copy to Google Drive archive so Google Drive holds both raw volumes and validation results
-    with open(GDRIVE_ROOT / "external_flare22_validation.json", "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    # Optionally mirror results to external dataset root when MEDTRT_DATASETS_DIR is explicitly set
+    if os.environ.get("MEDTRT_DATASETS_DIR") and GDRIVE_ROOT.exists():
+        with open(GDRIVE_ROOT / "external_flare22_validation.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
 
     print("=" * 108)
     print(f"[PASS] Saved External Validation & TOST Statistical Suite -> {out_json}")

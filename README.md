@@ -2,9 +2,9 @@
 
 > **Research Benchmark & Engineering Disclosure.** MedTRT is an end-to-end GPU systems and numerical-stability study of a pretrained 3D Residual U-Net (`MONAI spleen_ct_segmentation` v`0.6.1`) evaluated across **53 abdominal 3D CT volumes** (`41` Medical Segmentation Decathlon `Task09_Spleen` volumes plus `12` unseen external multi-center MICCAI `FLARE22` volumes). It is not a clinical medical device and makes no clinical triage or patient-care claims.
 >
-> Every number in this document is deterministically rendered from hardware-verified artifacts in `results/`. Run `python -m medtrt.verify_claims` to verify all `13/13` integrity, data-split, external-cohort, and TOST equivalence checks without requiring a GPU.
+> Every number in this document is deterministically rendered from hardware-verified artifacts in `results/`. Run `python -m medtrt.verify_claims` to verify all `14/14` integrity, data-split, external-cohort, and TOST equivalence checks without requiring a GPU.
 
-📄 **Full Technical Manuscript:** [`docs/TECHNICAL_PAPER.pdf`](docs/TECHNICAL_PAPER.pdf) ([LaTeX Source](docs/TECHNICAL_PAPER.tex) | [Markdown Version](docs/TECHNICAL_PAPER.md))  
+📄 **Quick-Read Scientific Report (12-Page Two-Column PDF with Structured Abstract):** **[`MedTRT_Scientific_Report.pdf`](MedTRT_Scientific_Report.pdf)** ([LaTeX Source](docs/TECHNICAL_PAPER.tex) | [Docs Copy](docs/TECHNICAL_PAPER.pdf) | [Markdown Edition](docs/TECHNICAL_PAPER.md))  
 📚 **Engineering Guides & Studies:** [`docs/README.md`](docs/README.md) | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | [`docs/CUDA_KERNEL_STUDY.md`](docs/CUDA_KERNEL_STUDY.md) | [`docs/TENSORRT_PRECISION_STUDY.md`](docs/TENSORRT_PRECISION_STUDY.md)  
 🔍 **Benchmarks, Validation & Claim Audit:** [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) | [`docs/VALIDATION_RESULTS.md`](docs/VALIDATION_RESULTS.md) | [`docs/CLAIM_VERIFICATION_REPORT.md`](docs/CLAIM_VERIFICATION_REPORT.md)
 
@@ -347,7 +347,7 @@ Because a non-significant two-sided $t$-test ($p = 0.885$) only fails to reject 
 | **Pooled Cohorts (`N=21`)** | **`trt_fp16_cuda` (Folded) Volume** | **`±0.10 cm³`** | **`-0.0059 ± 0.0271 cm³`** | **`[-0.0161, +0.0043]`** | **`0.00e+00`** | **PASS** |
 | **Pooled Cohorts (`N=21`)** | **`trt_fp16_cuda` (Folded) Dice** | **`±0.0010`** | **`-0.000025 ± 0.000071`** | **`[-0.000052, +0.000002]`** | **`0.00e+00`** | **PASS** |
 
-Across allsliding-window calls on the 9 MSD cases (`169` batches), folded TensorRT FP16 flipped only `478` window-voxels from background to foreground and `418` the other way (largest logit difference `0.072` on logits up to `23.0`, probability MAE `1.66e-06`). At the final native-resolution organ mask level, `trt_fp16_cuda` flips an average of **`8.8` voxels per scan (`0.0093%` of organ voxels)** on MSD and **`22.6` voxels per scan (`0.0208%`)** on unseen external `FLARE22`.
+Across all sliding-window calls on the 9 MSD cases (`169` batches), folded TensorRT FP16 flipped only `478` window-voxels from background to foreground and `418` the other way (largest logit difference `0.072` on logits up to `23.0`, probability MAE `1.66e-06`). At the final native-resolution organ mask level, `trt_fp16_cuda` flips an average of **`8.8` voxels per scan (`0.0093%` of organ voxels)** on MSD and **`22.6` voxels per scan (`0.0208%`)** on unseen external `FLARE22`.
 
 ### 11.2 Cross-Profile Bland-Altman Summary (MSD `N=9`, Mean Dice Ref `0.965233`)
 
@@ -405,6 +405,7 @@ Across all `9` internal MSD validation cases, Dice is not significantly correlat
 
 ```text
 medtrt/
+├── MedTRT_Scientific_Report.pdf         # Standalone 12-page two-column scientific report (LaTeX-compiled PDF)
 ├── cuda/
 │   └── medical_kernels.cu               # 9 custom CUDA C++17 kernels compiled to sm_120 SASS via NVRTC
 ├── src/medtrt/
@@ -420,7 +421,7 @@ medtrt/
 │   ├── evaluate.py                      # 10-metric segmentation evaluator & dual Bland-Altman analyzer
 │   ├── probes.py                        # Hardware probes: ingestion, float64 dtype, clock DVFS, BN fold
 │   ├── report.py                        # Deterministic README.md & stage-breakdown figure generator
-│   └── verify_claims.py                 # 13-check offline verifier auditing all claims against raw telemetry
+│   └── verify_claims.py                 # 14-check offline verifier auditing all claims against raw telemetry
 ├── benchmarks/
 │   └── benchmark_external_flare22.py    # External MICCAI FLARE22 (N=12) benchmark, cold I/O, & TOST suite
 ├── analysis/
@@ -527,4 +528,4 @@ If you use MedTRT, its custom register-affine CUDA kernels, or the analytical `C
 
 - **Pretrained Model:** MONAI Model Zoo `spleen_ct_segmentation` v`0.6.1` (Apache-2.0 License).
 - **Internal Dataset (`Task09_Spleen`):** [Medical Segmentation Decathlon](http://medicaldecathlon.com/) (Antonelli et al., *Nature Communications*, 2022; Simpson et al., 2019) under **CC-BY-SA 4.0**. The slice visualizations in `docs/figures/failure_case_*.png` are derived from `Task09_Spleen`.
-- **External Validation Dataset (`FLARE22`):** [MICCAI FLARE22 Challenge Dataset](https://zenodo.org/record/7860267) (Ma et al., *Medical Image Analysis*, 2022) under **CC-BY-NC-SA 4.0 / Zenodo Open Access**. Raw medical volumes, pretrained weights, and compiled `.engine` binaries are excluded from git tracking via `.gitignore` and archived on Google Drive (`MedTRT_Datasets/`).
+- **External Validation Dataset (`FLARE22`):** [MICCAI FLARE22 Challenge Dataset](https://zenodo.org/record/7860267) (Ma et al., *Medical Image Analysis*, 2022) under **CC-BY-NC-SA 4.0 / Zenodo Open Access**. Raw medical volumes, pretrained weights, and compiled `.engine` binaries are excluded from git tracking via `.gitignore`.

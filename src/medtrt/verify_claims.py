@@ -285,9 +285,12 @@ def check_technical_paper() -> Result:
     md_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.md"
     tex_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.tex"
     pdf_path = MEDTRT_ROOT / "docs" / "TECHNICAL_PAPER.pdf"
-    for p in (md_path, tex_path, pdf_path):
+    root_pdf_path = MEDTRT_ROOT / "MedTRT_Scientific_Report.pdf"
+    for p in (md_path, tex_path, pdf_path, root_pdf_path):
         if not p.exists() or p.stat().st_size < 10_000:
             return False, f"missing or truncated technical paper artifact: {p.name}"
+    if root_pdf_path.read_bytes() != pdf_path.read_bytes():
+        return False, "MedTRT_Scientific_Report.pdf is out of sync with docs/TECHNICAL_PAPER.pdf"
 
     md_text = md_path.read_text(encoding="utf-8")
     tex_text = tex_path.read_text(encoding="utf-8")
@@ -332,8 +335,8 @@ def check_technical_paper() -> Result:
 
     return (
         True,
-        f"TECHNICAL_PAPER (.md={md_path.stat().st_size // 1024} KB, .tex={tex_path.stat().st_size // 1024} KB, "
-        f".pdf={pdf_path.stat().st_size // 1024} KB) verified with 7 tables, 8 secondary problems (A-H), and 21-patient TOST data",
+        f"MedTRT_Scientific_Report.pdf & TECHNICAL_PAPER (.md={md_path.stat().st_size // 1024} KB, .tex={tex_path.stat().st_size // 1024} KB, "
+        f".pdf={pdf_path.stat().st_size // 1024} KB) verified with 8 tables, 8 secondary problems (A-H), and 21-patient TOST data",
     )
 
 

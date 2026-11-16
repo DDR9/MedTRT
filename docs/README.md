@@ -8,9 +8,10 @@ Welcome to the **MedTRT** documentation directory. Every number, table, and plot
 
 | Document | Format | Description |
 | :--- | :---: | :--- |
-| **[`TECHNICAL_PAPER.pdf`](TECHNICAL_PAPER.pdf)** | PDF | **12-Page IEEE Two-Column Technical Paper** — Complete mathematical derivations, 7 tables, 13 figures, 9 custom CUDA C++17 kernels, analytical `ConvTranspose3d + BatchNorm3d` FP64 weight folding, and 53-volume multi-cohort TOST statistical equivalence study. |
+| **[`../MedTRT_Scientific_Report.pdf`](../MedTRT_Scientific_Report.pdf)** | PDF (Root) | **12-Page Two-Column Scientific Report (Root Quick-Access Copy)** — Standalone publication-style report with structured Abstract, mathematical derivations, 8 tables, 13 figures, 9 custom CUDA C++17 kernels, analytical `ConvTranspose3d + BatchNorm3d` FP64 weight folding, and 53-volume TOST equivalence validation. |
+| **[`TECHNICAL_PAPER.pdf`](TECHNICAL_PAPER.pdf)** | PDF | **12-Page Two-Column Technical Manuscript** — Identical compiled manuscript archived inside `docs/`. |
 | **[`TECHNICAL_PAPER.md`](TECHNICAL_PAPER.md)** | Markdown | Full GitHub-readable Markdown edition of the technical paper. |
-| **[`TECHNICAL_PAPER.tex`](TECHNICAL_PAPER.tex)** | LaTeX | Complete LaTeX source code for compiling `TECHNICAL_PAPER.pdf`. |
+| **[`TECHNICAL_PAPER.tex`](TECHNICAL_PAPER.tex)** | LaTeX | Complete LaTeX source code for compiling `MedTRT_Scientific_Report.pdf` and `TECHNICAL_PAPER.pdf`. |
 
 ---
 
