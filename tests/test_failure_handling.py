@@ -22,12 +22,14 @@ from medtrt.cuda_kernels import (
     cuda_fused_softmax_2ch,
 )
 from medtrt.profiles import get_profile
-from medtrt.trt_runner import TRTRunner
 
 DEVICE = torch.device("cuda:0")
 
 
 def test_missing_tensorrt_engine_raises_file_not_found(tmp_path: Path) -> None:
+    pytest.importorskip("tensorrt")
+    from medtrt.trt_runner import TRTRunner
+
     missing_engine = tmp_path / "nonexistent_model.engine"
     with pytest.raises(FileNotFoundError, match="TensorRT engine not found"):
         TRTRunner(engine_path=missing_engine, device=DEVICE)
@@ -38,7 +40,11 @@ def test_unknown_execution_profile_raises_key_error() -> None:
         get_profile("nonexistent_backend_profile")
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Requires CUDA GPU and compiled TensorRT engine")
 def test_trt_runner_rejects_invalid_tensor_dimensions_and_batch_size() -> None:
+    pytest.importorskip("tensorrt")
+    from medtrt.trt_runner import TRTRunner
+
     runner = TRTRunner(device=DEVICE)
     # 4D tensor instead of 5D (B, 1, 96, 96, 96)
     with pytest.raises((RuntimeError, ValueError, AssertionError, IndexError)):
@@ -58,9 +64,10 @@ def test_cuda_kernels_reject_cpu_tensors_and_wrong_shapes() -> None:
     with pytest.raises(ValueError, match="CUDA"):
         cuda_count_nonzero_u8(cpu_mask)
 
-    wrong_shape_logits = torch.zeros((1, 3, 16, 16, 16), device=DEVICE, dtype=torch.float32)
-    with pytest.raises(ValueError, match="2-channel"):
-        cuda_fused_softmax_2ch(wrong_shape_logits)
+    if torch.cuda.is_available():
+        wrong_shape_logits = torch.zeros((1, 3, 16, 16, 16), device=DEVICE, dtype=torch.float32)
+        with pytest.raises(ValueError, match="2-channel"):
+            cuda_fused_softmax_2ch(wrong_shape_logits)
 
 
 def test_invalid_voxel_spacing_rejected() -> None:
